@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Capture the Flag</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        p {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+        }
+
+        .play-button {
+            background-color: #ff5722;
+            color: #fff;
+            padding: 1rem 2rem;
+            font-size: 1.5rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .play-button:hover {
+            background-color: #e64a19;
+        }
+
+        footer {
+            position: absolute;
+            bottom: 10px;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .github-button {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: #ff5722;
+            color: #fff;
+            padding: 0.5rem 1rem;
+            font-size: 1.2rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.3s ease;
+        }
+
+        .github-button:hover {
+            background-color: #e64a19;
+        }
+    </style>
+</head>
+<body>
+    <a href="https://github.com/OrtheSnowJames/capture-flag-io" class="github-button" target="_blank" rel="noopener noreferrer">
+        &lt;/&gt;
+    </a>
+    <div style="font-size: 5rem;">🚩</div>
+    <h1>Capture the Flag</h1>
+    <p>Capture the flag to win!</p>
+    <button class="play-button" onclick="startGame()">Play Now</button>
+
+    <footer>This game is licenced under the MIT License.</footer>
+
+    <script>
+        function startGame() {
+            window.location.href = "shell.html"; // Redirect to the game page
+        }
+    </script>
+</body>
+</html>
