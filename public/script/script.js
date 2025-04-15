@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import { otherCtx, contextEngine, Commands, Scene, OCtxButton, OCtxTextField } from "./context-engine.mjs";
 import { gameScene } from "./game.js";
 
