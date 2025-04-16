@@ -15,6 +15,7 @@ const flagHeight = 100;
 const moveSpeed = 175;
 const cameraWidth = 400; // vars for how many px to render
 const cameraHeight = 400;
+const readableMessages = 7; // num * 30 = how much px is the message box
 const fieldWidth = 1000;
 const fieldHeight = 500;
 
@@ -84,14 +85,17 @@ let game = {
     messages: [],
 };
 
-let sendName = false;
+let sendName = false; 
 export class gameScene extends Scene {
+    messageField = new OCtxTextField(0, readableMessages * 30, 500, 30, 500/20);
+    submitButton = new OCtxButton(520, readableMessages * 30, 100, 30, "Send");
     constructor() {
         super();
         this.init();
     }
 
     init() {
+        this.messageField.setPlaceholder("Type a message");
         this.initSocketIO();
     }
 
@@ -110,6 +114,13 @@ export class gameScene extends Scene {
             } else {
                 // If the player doesn't exist, do nothing
                 console.log(`Player ${playerName} not found in game object.`);
+            }
+        });
+
+        client.on('message', (data) => {
+            game.messages.push(data);
+            if (game.messages.length > readableMessages) {
+                game.messages.shift(); // Remove the oldest message
             }
         });
 
@@ -146,16 +157,15 @@ export class gameScene extends Scene {
                 console.log("player killed", dataObj.player);
             }
 
-            if (game.players[dataObj.killer] && dataObj.killer !== "system") game.players[dataObj.killer].score++;
+            if (game.players[dataObj.killer] && dataObj.killer !== "system")   game.players[dataObj.killer].score++;
 
             if (game.players[dataObj.player].name === naem) {
                 // we need to leave this scene
                 initialized = false;
                 dead = true;
+                commands.switchScene(2); // Switch to the dead scene
+                client.disconnect();
             }
-
-            commands.switchScene(2); // Switch to the dead scene
-            client.disconnect();
         });
 
         client.on('flagCaptured', (data) => {
@@ -216,6 +226,22 @@ export class gameScene extends Scene {
             let newX = game.players[naem].x;
             let newY = game.players[naem].y;
 
+            // UI
+            this.messageField.update(deltaTime, commands);
+            if (this.messageField.isActive) {
+                console.log("message field active");
+            }
+            this.submitButton.update(commands);
+
+            if (this.submitButton.isClicked(commands)) {
+                const message = this.messageField.getText();
+                if (message !== undefined) {
+                    client.emit('message', JSON.stringify(`${naem} said ${message}`)); 
+                    this.messageField.setValue("");
+                }
+                console.log("message sent", message);
+            }
+
             // Handle dash cooldown
             if (dashCooldownRemaining > 0) {
                 dashCooldownRemaining -= deltaTime;
@@ -256,10 +282,12 @@ export class gameScene extends Scene {
             }
 
             const objects = [field]; // Add other objects here if needed
-            if (moved && canMove(newX, newY, objects, [middleCube])) {
-                game.players[naem].x = newX;
-                game.players[naem].y = newY;
-                client.emit('move', JSON.stringify({ name: naem, x: newX, y: newY }));
+            if (moved) {
+                if (canMove(newX, newY, objects, [middleCube])) {
+                    game.players[naem].x = newX;
+                    game.players[naem].y = newY;
+                    client.emit('move', JSON.stringify({ name: naem, x: newX, y: newY }));
+                }
             }
 
             // Create an array of objects sorted by zIndex
@@ -337,6 +365,29 @@ export class gameScene extends Scene {
                     }
                 }
             });
+
+            // Draw message box
+            const messageBoxHeight = readableMessages * 30;
+            const messageBoxWidth = 500;
+            ctx.drawRect(
+                0,
+                0,
+                messageBoxWidth,
+                messageBoxHeight,
+                "rgba(255, 255, 255, 0.5)",
+                false,
+                false
+            );
+
+            for (let message of game.messages) {
+                const messageIndex = game.messages.indexOf(message);
+                const messageY = messageBoxHeight - (messageIndex + 1) * 30;
+                ctx.drawText(5, messageY, message, "white", 20, false, false);
+            }
+
+            // UI
+            this.messageField.draw(ctx, false, false);
+            this.submitButton.draw(ctx, false, false);
         }
     }
 }

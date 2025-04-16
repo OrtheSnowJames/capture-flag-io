@@ -102,7 +102,6 @@ function movePlayer(player, newX, newY) {
 function checkSpeed(x, y, newx, newy, topSpeed = 400) {
     const dx = Math.abs(x - newx);
     const dy = Math.abs(y - newy);
-    const distance = Math.sqrt(dx * dx + dy * dy);
 
     if (dx > topSpeed || dy > topSpeed) {
         return true;
