@@ -7,9 +7,10 @@ import { Server } from 'socket.io';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { json } from 'stream/consumers';
-
 // filepath: /home/james/Documents/capture-flag-io/node/src/index.js
-const __dirname = import.meta.dirname;
+// Get the directory name of the current module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.join(dirname(__filename), '..');
 
 // Initialize express app
 const app = express();
@@ -138,6 +139,14 @@ app.get('/shell.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/shell.html'));
 });
 
+app.get('/assets/redflag.png', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public/assets/redflag.png'));
+})
+
+app.get('/assets/blueflag.png', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public/assets/blueflag.png'));
+});
+
 app.get('/check-name', (req, res) => {
     const name = typeof req.query.name === 'string' ? req.query.name : '';
     const isNameTaken = name && game.players[name] !== undefined && game.players[name].name === name;
@@ -196,7 +205,7 @@ io.on('connection', (socket) => {
                 flag.capturedBy = "";
                 flag.x = player.x;
                 flag.y = player.y;
-                emitWithLogging('flagDropped', JSON.stringify({ player: player.name, flag: player.team }));
+                emitWithLogging('flagDropped', JSON.stringify({ player: player.name, flag: player.team === "red" ? "blue" : "red" }));
             }
         }
     });
@@ -213,7 +222,7 @@ io.on('connection', (socket) => {
                 const otherPlayer = game.players[name];
                 if (otherPlayer.id !== player.id && Math.abs(player.x - otherPlayer.x) < 20 && Math.abs(player.y - otherPlayer.y) < 20) {
                     delete game.players[name];
-                    emitWithLogging('kill', JSON.stringify({ player: player.name, killer: otherPlayer.name }));
+                    emitWithLogging('kill', JSON.stringify({ player: otherPlayer.name, killer: player.name }));
                     otherPlayer.team === "red" ? reds-- : blues--;
 
                     if (otherPlayer.capture) {
@@ -246,7 +255,6 @@ io.on('connection', (socket) => {
                 emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }));
             }
 
-            io.emit('move', JSON.stringify(data));
             if (player.capture) {
                 emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: flag.team, x: player.x, y: player.y }));
             }
@@ -261,6 +269,7 @@ io.on('connection', (socket) => {
                 emitWithLogging('flagReturned', JSON.stringify({ player: player.name, flag: flag.team }));
                 emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }))
             }
+            io.emit('move', JSON.stringify(data));
         }
     });
 

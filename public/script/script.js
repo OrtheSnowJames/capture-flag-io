@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { otherCtx, contextEngine, Commands, Scene, OCtxButton, OCtxTextField } from "./context-engine.mjs";
-import { gameScene } from "./game.js";
+import { gameScene, deadScene } from "./game.js";
 
 // filepath: /home/james/Documents/capture-flag-io/node/public/script/script.js
 
@@ -99,7 +99,7 @@ class menuScene extends Scene {
         this.startButton.draw(ctx);
         this.nameField.draw(ctx);
         ctx.drawText(
-            CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166, // 16.6% of canvas width offset
+            CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166, // 16.6% of canvas width offset 
             CANVAS_HEIGHT * 0.1, // 10% of canvas height from the top
             "Welcome to capture-flag-io!!1",
             "white",
@@ -110,7 +110,8 @@ class menuScene extends Scene {
 
 let menuSceneObj = new menuScene();
 let gameSceneObj = new gameScene();
+let deadSceneObj = new deadScene();
 
-let game = [menuSceneObj, gameSceneObj];
+let game = [menuSceneObj, gameSceneObj, deadSceneObj];
 
 contextEngine(game, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // call the engine

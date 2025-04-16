@@ -8,7 +8,6 @@ This game is built using my custom TypeScript game engine. While there are many 
 
 ### Design Philosophy
 - Minimalist cubic player designs (intentional!)
-- Flag sprites coming soon
 - My Dream-inspired gameplay elements
 - No-budget, all passion
 

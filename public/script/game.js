@@ -26,6 +26,11 @@ let dashCooldownRemaining = 0; // Time remaining for cooldown
 let dashActive = false; // Whether the dash is currently active
 let dashTimeRemaining = 0; // Time remaining for the active dash
 
+let redFlagImage = new Image(25, 100);
+redFlagImage.src = "/assets/redflag.png";
+let blueFlagImage = new Image(25, 100);
+blueFlagImage.src = "/assets/blueflag.png";
+
 const field = {
     x: 0,
     y: 0,
@@ -67,6 +72,8 @@ function canMove(x, y, objectsinside, objectsoutside = []) {
 
     return true; // Valid position
 }
+
+let dead = false;
 
 let game = {
     players: {},
@@ -134,9 +141,21 @@ export class gameScene extends Scene {
             const dataObj = JSON.parse(data);
             // Remove the killed player from the game object
 
-            if (game.players[dataObj.player]) delete game.players[dataObj.player];
+            if (game.players[dataObj.player]) {
+                delete game.players[dataObj.player];
+                console.log("player killed", dataObj.player);
+            }
 
             if (game.players[dataObj.killer] && dataObj.killer !== "system") game.players[dataObj.killer].score++;
+
+            if (game.players[dataObj.player].name === naem) {
+                // we need to leave this scene
+                initialized = false;
+                dead = true;
+            }
+
+            commands.switchScene(2); // Switch to the dead scene
+            client.disconnect();
         });
 
         client.on('flagCaptured', (data) => {
@@ -258,41 +277,89 @@ export class gameScene extends Scene {
         } else if (!sendName) {
             client.emit('name', naem);
             sendName = true;
+        } else if (dead) {
+            
         }
     }
 
     draw(ctx) {
         if (!initialized) return;
-        ctx.setCamera(game.players[naem].x - 255, game.players[naem].y - 155); // center camera on player
+        
+        // Check if player exists and has required properties
+        if (!game.players[naem] || 
+            typeof game.players[naem].x === 'undefined' || 
+            typeof game.players[naem].y === 'undefined') {
+            return;
+        }
+
+        // Set camera position
+        ctx.setCamera(game.players[naem].x - 255, game.players[naem].y - 155);
         ctx.clearBackground('#918777');
 
-        // increase FOV if dash enabled
-        ctx.setZoom(2.5)
-
-        // draw the playing field
-        ctx.drawRect(0, 0, 1000, 500, "#4f4d4a");
-
-        // draw the middle cube
-        ctx.drawRect(middleCube.x, middleCube.y, middleCube.width, middleCube.height, "#4f4d40");
-
-        for (let playerName in game.players) {
-            const player = game.players[playerName];
-            ctx.drawRect(player.x, player.y, playerWidth, playerHeight, player.color);
-            ctx.drawText((player.x + playerWidth / 2) - 20, player.y - 20, `${player.name} (${player.score}, ${player.team})`, "white", 10);
+        // Draw field if it exists
+        if (field && field.width && field.height) {
+            ctx.drawRect(field.x, field.y, field.width, field.height, "#4f4d4a");
         }
 
-        // draw flags
-        for (let flagName in game.flags) {
-            const flag = game.flags[flagName];
-            ctx.drawRect(flag.x, flag.y, flagWidth, flagHeight, flag.color);
-            if (flag.capturedBy) {
-                ctx.drawText(flag.x + flagWidth / 2 - 20, flag.y - 20, `${flag.capturedBy}`, "white", 10);
-            }
-            if (flag.capturedBy !== "") {
-                // draw the line from the flag to the player
-                const player = game.players[flag.capturedBy];
-                ctx.drawLine(flag.x + flagWidth / 2, flag.y + flagHeight / 2, player.x + playerWidth / 2, player.y + playerHeight / 2, "purple");
-            }
+        // Draw middle cube if it exists
+        if (middleCube && middleCube.width && middleCube.height) {
+            ctx.drawRect(middleCube.x, middleCube.y, middleCube.width, middleCube.height, "#4f4d40");
         }
+
+        // Draw flags if they exist
+        if (game.flags) {
+            Object.values(game.flags).forEach(flag => {
+                if (flag && typeof flag.x !== 'undefined' && typeof flag.y !== 'undefined') {
+                    const flagImg = ImageLoader.getImage(flag.team + 'flag');
+                    if (flagImg) {
+                        ctx.drawImage(flagImg, flag.x, flag.y, flagWidth, flagHeight);
+                    } else {
+                        ctx.drawRect(flag.x, flag.y, flagWidth, flagHeight, flag.color);
+                    }
+                }
+            });
+        }
+
+        // Draw players if they exist
+        if (game.players) {
+            Object.values(game.players).forEach(player => {
+                if (player && 
+                    typeof player.x !== 'undefined' && 
+                    typeof player.y !== 'undefined' && 
+                    player.color) {
+                    ctx.drawRect(player.x, player.y, playerWidth, playerHeight, player.color);
+                    
+                    // Draw player name if it exists
+                    if (player.name) {
+                        ctx.drawText(
+                            (player.x + playerWidth / 2) - 20,
+                            player.y - 20,
+                            `${player.name} (${player.score || 0}, ${player.team || ""})`,
+                            "white",
+                            10
+                        );
+                    }
+                }
+            });
+        }
+    }
+}
+
+export class deadScene extends Scene {
+    constructor() {
+        super();
+    }
+
+    update(deltaTime, commands) {
+        if (commands.keys['Enter']) {
+            window.location.reload();
+        }
+    }
+
+    draw(ctx) {
+        ctx.setCamera(0, 0);
+        ctx.clearBackground('black');
+        ctx.drawText(CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166, CANVAS_HEIGHT * 0.1, "You are dead.", "white", 50);
+        ctx.drawText(CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166, CANVAS_HEIGHT * 0.2, "Press Enter to reload and pick a new name.", "white", 30);
     }
 }
