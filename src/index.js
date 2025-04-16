@@ -55,15 +55,6 @@ function checkCollisionPlayerFlag(player, flag) {
     return checkCollision(player.x, player.y, playerWidth, playerHeight, flag.x, flag.y, flagWidth, flagHeight);
 }
 
-function getRandomColor() {
-    const letters = '0123456789ABCDEF';
-    let color = '#';
-    for (let i = 0; i < 6; i++) {
-        color += letters[Math.floor(Math.random() * 16)];
-    }
-    return color;
-}
-
 function isProfane(something) {
     return profanity.exists(something);
 }
@@ -89,7 +80,7 @@ function createPlayer(name, id, team) {
         name: name,
         x: Math.floor(Math.random() * 50) + (flag.x - 25),
         y: Math.floor(Math.random() * 50) + (flag.y - 25),
-        color: getRandomColor(),
+        color: team,
         score: 0,
         team: team,
         capture: false,

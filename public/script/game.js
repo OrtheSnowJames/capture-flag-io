@@ -311,7 +311,7 @@ export class gameScene extends Scene {
         if (game.flags) {
             Object.values(game.flags).forEach(flag => {
                 if (flag && typeof flag.x !== 'undefined' && typeof flag.y !== 'undefined') {
-                    ctx.drawRect(flag.x, flag.y, flagWidth, flagHeight, flag.color);
+                    ctx.drawImageScaled(flag.team === "red" ? redFlagImage : blueFlagImage, flag.x, flag.y, flagWidth, flagHeight);
                 }
             });
         }
