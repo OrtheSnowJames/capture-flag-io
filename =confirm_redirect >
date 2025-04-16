@@ -1,8 +1,0 @@
-alias code='code --ozone-platform-hint=wayland'
-alias go_wasm32_build='GOOS=js GOARCH=wasm go build -o main.wasm'
-alias godmode='sudo su'
-alias hypr_config='nvim ~/.config/hypr/hyprland.conf'
-alias please='sudo'
-alias torque='~/repos/Torque2D/Torque2D'
-alias voldown='pactl set-sink-volume @DEFAULT_SINK@ -5%'
-alias volup='pactl set-sink-volume @DEFAULT_SINK@ +5%'
