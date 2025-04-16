@@ -27,9 +27,9 @@ let dashActive = false; // Whether the dash is currently active
 let dashTimeRemaining = 0; // Time remaining for the active dash
 
 let redFlagImage = new Image(25, 100);
-redFlagImage.src = "/assets/redflag.png";
+    redFlagImage.src = "/assets/redflag.png";
 let blueFlagImage = new Image(25, 100);
-blueFlagImage.src = "/assets/blueflag.png";
+    blueFlagImage.src = "/assets/blueflag.png";
 
 const field = {
     x: 0,
@@ -293,6 +293,7 @@ export class gameScene extends Scene {
         }
 
         // Set camera position
+        ctx.setZoom(2.5);
         ctx.setCamera(game.players[naem].x - 255, game.players[naem].y - 155);
         ctx.clearBackground('#918777');
 
@@ -310,12 +311,7 @@ export class gameScene extends Scene {
         if (game.flags) {
             Object.values(game.flags).forEach(flag => {
                 if (flag && typeof flag.x !== 'undefined' && typeof flag.y !== 'undefined') {
-                    const flagImg = ImageLoader.getImage(flag.team + 'flag');
-                    if (flagImg) {
-                        ctx.drawImage(flagImg, flag.x, flag.y, flagWidth, flagHeight);
-                    } else {
-                        ctx.drawRect(flag.x, flag.y, flagWidth, flagHeight, flag.color);
-                    }
+                    ctx.drawRect(flag.x, flag.y, flagWidth, flagHeight, flag.color);
                 }
             });
         }

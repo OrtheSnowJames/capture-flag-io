@@ -218,6 +218,7 @@ io.on('connection', (socket) => {
                 movePlayer(player, data.x, data.y);
             }
 
+            // death
             for (const name in game.players) {
                 const otherPlayer = game.players[name];
                 if (otherPlayer.id !== player.id && Math.abs(player.x - otherPlayer.x) < 20 && Math.abs(player.y - otherPlayer.y) < 20) {
@@ -226,7 +227,7 @@ io.on('connection', (socket) => {
                     otherPlayer.team === "red" ? reds-- : blues--;
 
                     if (otherPlayer.capture) {
-                        const flag = game.flags[otherPlayer.team];
+                        const flag = game.flags[player.team];
                         flag.capturedBy = "";
                         flag.x = player.x;
                         flag.y = player.y;
