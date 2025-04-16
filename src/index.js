@@ -98,6 +98,19 @@ function movePlayer(player, newX, newY) {
     }
 }
 
+// Check if the speed of the player is too high, kill if true
+function checkSpeed(x, y, newx, newy, topSpeed = 400) {
+    const dx = Math.abs(x - newx);
+    const dy = Math.abs(y - newy);
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (dx > topSpeed || dy > topSpeed) {
+        return true;
+    }
+
+    return false;
+}
+
 function emitWithLogging(event, message, log = true) {
     if (log) {
         console.log(`Emitting event: ${event}, Message:`, message);
@@ -205,8 +218,15 @@ io.on('connection', (socket) => {
         if (typeof data === 'string') data = JSON.parse(data);
         const player = data?.name ? game.players[data.name] : undefined;
         if (player) {
+
             if (data.x !== undefined && data.y !== undefined) {
-                movePlayer(player, data.x, data.y);
+                if (!checkSpeed(player.x, player.y, data.x, data.y)) {
+                    movePlayer(player, data.x, data.y);
+                } else {
+                    console.log("Player speed too high, killing player: ", player.name);
+                    emitWithLogging('kill', JSON.stringify({ player: player.name, killer: "system" }));
+                    delete game.players[player.name];
+                }
             }
 
             // death
