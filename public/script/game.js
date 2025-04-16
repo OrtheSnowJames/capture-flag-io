@@ -340,6 +340,13 @@ export class gameScene extends Scene {
             Object.values(game.flags).forEach(flag => {
                 if (flag && typeof flag.x !== 'undefined' && typeof flag.y !== 'undefined') {
                     ctx.drawImageScaled(flag.team === "red" ? redFlagImage : blueFlagImage, flag.x, flag.y, flagWidth, flagHeight);
+
+                    if (flag.capturedBy) {
+                        const player = game.players[flag.capturedBy];
+                        if (player && player.x && player.y) {
+                            ctx.drawLine(flag.x, flag.y + flagHeight / 2, player.x + playerWidth / 2, player.y + playerHeight / 2, "purple");
+                        }
+                    }
                 }
             });
         }

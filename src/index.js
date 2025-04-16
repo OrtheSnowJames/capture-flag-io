@@ -18,9 +18,6 @@ const app = express();
 // Create an HTTP server using express app
 const server = http.createServer(app);
 
-// Initialize Socket.IO and attach it to the server
-const io = new Server(server);
-
 let reds = 0;
 let blues = 0;
 
@@ -150,6 +147,10 @@ app.get('/assets/blueflag.png', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/assets/blueflag.png'));
 });
 
+app.get('/assets/coverart.png', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public/assets/coverart.png'));
+})
+
 app.get('/check-name', (req, res) => {
     const name = typeof req.query.name === 'string' ? req.query.name : '';
     const isNameTaken = name && game.players[name] !== undefined && game.players[name].name === name;
@@ -166,135 +167,142 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
-// Socket.IO event handlers
-io.on('connection', (socket) => {
-    console.log('A user connected!');
+// Socket.IO logic (in a class for hopeful scalability)
+class SocketHandler {
+    constructor(server) {
+        this.io = new Server(server);
+    }
 
-    socket.on('message', (msg) => {
-        if (isProfane(msg)) {
-            msg = censorProfanity(msg);
-        }
-        game.messages.push(msg);
-        emitWithLogging('message', msg);
-    });
+    do() {
+        this.io.on('connection', (socket) => {
+            console.log('A user connected!');
 
-    socket.on('name', (name) => {
-        console.log('Name received: ', name);
-        if (!name || name.trim() === "") {
-            console.log("Invalid name received.");
-            return;
-        }
-        const team = reds < blues ? "red" : "blue";
-        team === "red" ? reds++ : blues++;
-
-        const player = createPlayer(name, socket.id, team);
-        game.players[name] = player;
-        console.log('Player added: ', player);
-
-        emitWithLogging('gameState', JSON.stringify(game));
-        emitWithLogging('newPlayer', JSON.stringify(player));
-        console.log("flags", game.flags);
-    });
-
-    socket.on('kill', (data) => {
-        if (typeof data === 'string') data = JSON.parse(data);
-        const player = data?.name ? game.players[data.name] : undefined;
-        if (player && data.killer) {
-            emitWithLogging('kill', JSON.stringify({ player: player.name, killer: data.killer }));
-
-            // Emit flagDropped if the killed player was carrying a flag
-            if (player.capture) {
-                const flag = game.flags[player.team];
-                flag.capturedBy = "";
-                flag.x = player.x;
-                flag.y = player.y;
-                emitWithLogging('flagDropped', JSON.stringify({ player: player.name, flag: player.team === "red" ? "blue" : "red" }));
-            }
-        }
-    });
-
-    socket.on('move', (data) => {
-        if (typeof data === 'string') data = JSON.parse(data);
-        const player = data?.name ? game.players[data.name] : undefined;
-        if (player) {
-
-            if (data.x !== undefined && data.y !== undefined) {
-                if (!checkSpeed(player.x, player.y, data.x, data.y)) {
-                    movePlayer(player, data.x, data.y);
-                } else {
-                    console.log("Player speed too high, killing player: ", player.name);
-                    emitWithLogging('kill', JSON.stringify({ player: player.name, killer: "system" }));
-                    delete game.players[player.name];
+            socket.on('message', (msg) => {
+                if (isProfane(msg)) {
+                    msg = censorProfanity(msg);
                 }
-            }
+                game.messages.push(msg);
+                emitWithLogging('message', msg);
+            });
 
-            // death
-            for (const name in game.players) {
-                const otherPlayer = game.players[name];
-                if (otherPlayer.id !== player.id && Math.abs(player.x - otherPlayer.x) < 20 && Math.abs(player.y - otherPlayer.y) < 20) {
-                    delete game.players[name];
-                    emitWithLogging('kill', JSON.stringify({ player: otherPlayer.name, killer: player.name }));
-                    otherPlayer.team === "red" ? reds-- : blues--;
+            socket.on('name', (name) => {
+                console.log('Name received: ', name);
+                if (!name || name.trim() === "") {
+                    console.log("Invalid name received.");
+                    return;
+                }
+                const team = reds < blues ? "red" : "blue";
+                team === "red" ? reds++ : blues++;
 
-                    if (otherPlayer.capture) {
+                const player = createPlayer(name, socket.id, team);
+                game.players[name] = player;
+                console.log('Player added: ', player);
+
+                emitWithLogging('gameState', JSON.stringify(game));
+                emitWithLogging('newPlayer', JSON.stringify(player));
+                console.log("flags", game.flags);
+            });
+
+            socket.on('kill', (data) => {
+                if (typeof data === 'string') data = JSON.parse(data);
+                const player = data?.name ? game.players[data.name] : undefined;
+                if (player && data.killer) {
+                    emitWithLogging('kill', JSON.stringify({ player: player.name, killer: data.killer }));
+
+                    if (player.capture) {
                         const flag = game.flags[player.team];
                         flag.capturedBy = "";
                         flag.x = player.x;
                         flag.y = player.y;
-                        emitWithLogging('flagDropped', JSON.stringify({ player: otherPlayer.name, flag: otherPlayer.team }));
+                        emitWithLogging('flagDropped', JSON.stringify({ player: player.name, flag: player.team === "red" ? "blue" : "red" }));
                     }
                 }
-            }
+            });
 
-            const flag = player.team === "red" ? game.flags.blue : game.flags.red;
-            if (!player.capture && Math.abs(player.x - flag.x) < 20 && Math.abs(player.y - flag.y) < 20) {
-                player.capture = true;
-                flag.capturedBy = player.name;
-                emitWithLogging('flagCaptured', JSON.stringify({ player: player.name, flag: flag.team }));
-            }
+            socket.on('move', (data) => {
+                if (typeof data === 'string') data = JSON.parse(data);
+                const player = data?.name ? game.players[data.name] : undefined;
+                if (player) {
+                    if (data.x !== undefined && data.y !== undefined) {
+                        if (!checkSpeed(player.x, player.y, data.x, data.y)) {
+                            movePlayer(player, data.x, data.y);
+                        } else {
+                            console.log("Player speed too high, killing player: ", player.name);
+                            emitWithLogging('kill', JSON.stringify({ player: player.name, killer: "system" }));
+                            delete game.players[player.name];
+                        }
+                    }
 
-            // Check if player is touching their own team's flag while it's not captured
-            const ownFlag = game.flags[player.team];
-            if (!ownFlag.capturedBy && 
-                Math.abs(player.x - ownFlag.x) < 20 && 
-                Math.abs(player.y - ownFlag.y) < 20) {
-                // Return flag to base when teammate touches it
-                ownFlag.x = player.team === "red" ? 100 : 900;
-                ownFlag.y = 250;
-                game.flags[player.team] = ownFlag;
-                emitWithLogging('flagReturned', JSON.stringify({ player: player.name, flag: ownFlag.team }));
-                emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }));
-            }
+                    for (const name in game.players) {
+                        const otherPlayer = game.players[name];
+                        if (otherPlayer.id !== player.id && Math.abs(player.x - otherPlayer.x) < 20 && Math.abs(player.y - otherPlayer.y) < 20) {
+                            delete game.players[name];
+                            emitWithLogging('kill', JSON.stringify({ player: otherPlayer.name, killer: player.name }));
+                            otherPlayer.team === "red" ? reds-- : blues--;
 
-            if (player.capture) {
-                emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: flag.team, x: player.x, y: player.y }));
-            }
+                            if (otherPlayer.capture) {
+                                const flag = game.flags[player.team];
+                                flag.capturedBy = "";
+                                flag.x = player.x;
+                                flag.y = player.y;
+                                emitWithLogging('flagDropped', JSON.stringify({ player: otherPlayer.name, flag: otherPlayer.team }));
+                            }
+                        }
+                    }
 
-            if (player.capture && checkCollisionPlayerFlag(player, { x: flag.team === "red" ? 900 : 100, y: 250, width: flagWidth, height: flagHeight })) {
-                player.score++;
-                emitWithLogging('scoreUp', JSON.stringify({ player: player.name}));
-                player.capture = false;
-                flag.capturedBy = "";
-                flag.x = flag.team === "red" ? 100 : 900;
-                flag.y = 250;
-                emitWithLogging('flagReturned', JSON.stringify({ player: player.name, flag: flag.team }));
-                emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }))
-            }
-            io.emit('move', JSON.stringify(data));
-        }
-    });
+                    const flag = player.team === "red" ? game.flags.blue : game.flags.red;
+                    if (!player.capture && Math.abs(player.x - flag.x) < 20 && Math.abs(player.y - flag.y) < 20) {
+                        player.capture = true;
+                        flag.capturedBy = player.name;
+                        emitWithLogging('flagCaptured', JSON.stringify({ player: player.name, flag: flag.team }));
+                    }
 
-    socket.on('disconnect', () => {
-        console.log('A user disconnected');
-        const playerName = Object.keys(game.players).find(name => game.players[name].id === socket.id);
-        if (playerName) {
-            const team = game.players[playerName].team;
-            team === "red" ? reds-- : blues--;
-            delete game.players[playerName];
-            emitWithLogging('kill', JSON.stringify({ player: playerName, killer: "system" }));
-        }
-    });
-});
+                    const ownFlag = game.flags[player.team];
+                    if (!ownFlag.capturedBy && 
+                        Math.abs(player.x - ownFlag.x) < 20 && 
+                        Math.abs(player.y - ownFlag.y) < 20) {
+                        ownFlag.x = player.team === "red" ? 100 : 900;
+                        ownFlag.y = 250;
+                        game.flags[player.team] = ownFlag;
+                        emitWithLogging('flagReturned', JSON.stringify({ player: player.name, flag: ownFlag.team }));
+                        emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }));
+                    }
+
+                    if (player.capture) {
+                        emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: flag.team, x: player.x, y: player.y - flagHeight / 2 }));
+                    }
+
+                    if (player.capture && checkCollisionPlayerFlag(player, { x: flag.team === "red" ? 900 : 100, y: 250, width: flagWidth, height: flagHeight })) {
+                        player.score++;
+                        emitWithLogging('scoreUp', JSON.stringify({ player: player.name}));
+                        player.capture = false;
+                        flag.capturedBy = "";
+                        flag.x = flag.team === "red" ? 100 : 900;
+                        flag.y = 250;
+                        emitWithLogging('flagReturned', JSON.stringify({ player: player.name, flag: flag.team }));
+                        emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }))
+                    }
+                    this.io.emit('move', JSON.stringify(data));
+                }
+            });
+
+            socket.on('disconnect', () => {
+                console.log('A user disconnected');
+                const playerName = Object.keys(game.players).find(name => game.players[name].id === socket.id);
+                if (playerName) {
+                    const team = game.players[playerName].team;
+                    team === "red" ? reds-- : blues--;
+                    delete game.players[playerName];
+                    emitWithLogging('kill', JSON.stringify({ player: playerName, killer: "system" }));
+                }
+            });
+        });
+    }
+}
+
+// Initialize SocketHandler and start listening for events
+const socketHandler = new SocketHandler(server);
+socketHandler.do();
 
 const PORT = process.env.PORT || 4566;
 server.listen(PORT, () => {

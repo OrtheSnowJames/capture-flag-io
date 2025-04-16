@@ -9,6 +9,8 @@ let switched = false;
 const CANVAS_WIDTH = 1600;
 const CANVAS_HEIGHT = 800;
 const PORT = 4566;
+let coverart = new Image();
+coverart.src = "/assets/coverart.png";
 
 function namefieldPlaceholderError(error, namefield) {
     namefield.deactivate();
@@ -96,11 +98,12 @@ class menuScene extends Scene {
         }
         ctx.setCamera(0, 0);
         ctx.clearBackground('black');
+        ctx.drawImage(coverart, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         this.startButton.draw(ctx);
         this.nameField.draw(ctx);
         ctx.drawText(
             CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166, // 16.6% of canvas width offset 
-            CANVAS_HEIGHT * 0.1, // 10% of canvas height from the top
+            CANVAS_HEIGHT * 0.2, // 10% of canvas height from the top
             "Welcome to capture-flag-io!!1",
             "white",
             50
