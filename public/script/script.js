@@ -5,6 +5,7 @@ import { gameScene, deadScene } from "./game.js";
 // filepath: /home/james/Documents/capture-flag-io/node/public/script/script.js
 
 export let naem = ""; // Exported variable to hold the player's name
+export let lobbyPath = ""; // Exported variable to hold the lobby path
 let switched = false;
 const CANVAS_WIDTH = 1600;
 const CANVAS_HEIGHT = 800;
@@ -19,10 +20,14 @@ function namefieldPlaceholderError(error, namefield) {
 }
 
 class menuScene extends Scene {
+    #loading = false;            // private flag to avoid re‑entry
+
     constructor() {
         super();
         this.init();
     }
+
+    async onLoad(commands) {}
 
     init() {
         const buttonWidthRatio = 0.25; // 25% of canvas width
@@ -53,43 +58,47 @@ class menuScene extends Scene {
         this.nameField.setPlaceholder("Enter your name");
     }
 
-    update(deltaTime, commands) {
-        if (switched) {
-            return;
-        }
-        this.startButton.update(commands);
-        this.nameField.update(commands, deltaTime);
 
-        if (this.startButton.isPressed) {
-            if (this.nameField.getText().length > 0) {
-                const enteredName = this.nameField.getText();
-                fetch(`http://localhost:${PORT}/check-name?name=${enteredName}`)
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error("Network response was not ok");
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        if (data.available) {
-                            // Name is available, proceed with the game
-                            console.log("Name is available!");
-                            naem = enteredName; // Assign the entered name to the exported `naem` variable
-                            this.nameField.deactivate();
-                            console.log("Name is: " + naem);
-                            commands.switchScene(1); // Switch to the game scene
-                            switched = true;
-                        } else {
-                            namefieldPlaceholderError("Name already taken", this.nameField);
-                        }
-                    })
-                    .catch(error => {
-                        console.error("There was a problem with the fetch operation:", error);
-                    });
-            } else {
-                namefieldPlaceholderError("Please enter a name", this.nameField);
-            }
+    update(dt, commands) {
+      if (switched || this.#loading) return;
+  
+      this.startButton.update(commands);
+      this.nameField.update(commands, dt);
+  
+      if (!this.startButton.isClicked(commands)) return;
+  
+      const entered = this.nameField.getText().trim();
+      if (!entered) {
+        namefieldPlaceholderError("Please enter a name", this.nameField);
+        return;
+      }
+  
+      this.#loading = true;      // lock until we finish
+      (async () => {
+        try {
+          const { path } = await fetch(`http://localhost:${PORT}/lobby`).then(r => r.json());
+          lobbyPath = path;
+  
+          const { available } = await fetch(
+            `http://localhost:${PORT}/check-name?name=${encodeURIComponent(entered)}&lobby=${lobbyPath}`
+          ).then(r => r.json());
+  
+          if (!available) {
+            namefieldPlaceholderError("Name already taken", this.nameField);
+            this.#loading = false;
+            return;
+          }
+  
+          naem = entered;
+          this.nameField.deactivate();
+          commands.switchScene(1);
+          switched = true;
+        } catch (err) {
+          console.error(err);
+          namefieldPlaceholderError("Server error – try again", this.nameField);
+          this.#loading = false;
         }
+      })();                      // immediately‑invoked async function
     }
 
     draw(ctx) {

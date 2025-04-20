@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 import { otherCtx, contextEngine, Commands, Scene, OCtxButton, OCtxTextField } from "./context-engine.mjs";
-import { naem } from "./script.js";
+import { naem, lobbyPath } from "./script.js";
 
 // filepath: /home/james/Documents/capture-flag-io/node/public/script/game.js
 
 const PORT = 4566;
 let initialized = false;
 
-const client = io(`http://localhost:${PORT}`); // client socket
+let client;
 const playerWidth = 25;
 const playerHeight = 25;
 const flagWidth = 25;
@@ -45,6 +45,12 @@ const middleCube = {
     width: playerWidth * 4,
     height: playerHeight * 4,
 };
+
+function Task(fn) {
+    (async () => {
+        await fn();
+    });
+}
 
 function canMove(x, y, objectsinside, objectsoutside = []) {
     for (const obj of objectsoutside) {
@@ -85,6 +91,7 @@ let game = {
     messages: [],
 };
 
+let getClient = false;
 let sendName = false; 
 export class gameScene extends Scene {
     messageField = new OCtxTextField(0, readableMessages * 30, 500, 30, 500/20);
@@ -96,10 +103,9 @@ export class gameScene extends Scene {
 
     init() {
         this.messageField.setPlaceholder("Type a message");
-        this.initSocketIO();
     }
 
-    initSocketIO() {
+    setupListeners() {
         client.on('move', (data) => {
             const dataObj = JSON.parse(data);
 
@@ -141,13 +147,6 @@ export class gameScene extends Scene {
             game.players[dataObj.name] = dataObj;
         });
 
-        client.on('gameState', (data) => {
-            const dataObj = JSON.parse(data);
-            console.log("gameState", dataObj);
-            game = dataObj
-            initialized = true;
-        });
-
         client.on('kill', (data) => {
             const dataObj = JSON.parse(data);
             // Remove the killed player from the game object
@@ -163,6 +162,8 @@ export class gameScene extends Scene {
                 // we need to leave this scene
                 initialized = false;
                 dead = true;
+                this.messageField.setValue("");
+                this.messageField.deactivate();
                 commands.switchScene(2); // Switch to the dead scene
                 client.disconnect();
             }
@@ -218,6 +219,53 @@ export class gameScene extends Scene {
                 game.players[dataObj.player].score++;
             }
         })
+    }
+
+    async onLoad(commands) {
+        console.log("connecting to: ", `localhost:${PORT}${lobbyPath}`);
+        client = await io(`http://localhost:${PORT}${lobbyPath}`,  { transports: ['websocket'], upgrade: false });
+        
+        this.setupListeners();
+
+        await (() => {
+            client.on('gameState', (data) => {
+                if (typeof data === 'string') {
+                    data = JSON.parse(data);
+                }
+                
+                console.log("gameState", data);
+                game = data
+                initialized = true;
+            });
+
+            client.on('connect', () => {
+                console.log("connected to server");
+                getClient = true;
+            });
+
+        })();
+
+        // wait until setupListeners is done
+        while (!getClient && !initialized) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        client.emit('name', naem);
+    }
+
+    async onExit(commands) {
+        initialized = false;
+        sendName = false;
+        getClient = false;
+        dead = false;
+        game = {
+            players: {},
+            flags: {
+                red: { x: 100, y: 250, color: "red", team: "red", capturedBy: "" },
+                blue: { x: 899, y: 250, color: "blue", team: "blue", capturedBy: "" },
+            },
+            messages: [],
+        };
+        client.disconnect();
     }
 
     update(deltaTime, commands) {
@@ -287,6 +335,7 @@ export class gameScene extends Scene {
                     game.players[naem].x = newX;
                     game.players[naem].y = newY;
                     client.emit('move', JSON.stringify({ name: naem, x: newX, y: newY }));
+                    console.log("moved", naem, newX, newY);
                 }
             }
 
@@ -300,19 +349,13 @@ export class gameScene extends Scene {
 
             renderObjects.sort((a, b) => a.zIndex - b.zIndex);
 
-            // Optionally, store or process the sorted objects
             this.sortedObjects = renderObjects; // Store for use in draw or other methods
-        } else if (!sendName) {
-            client.emit('name', naem);
-            sendName = true;
-        } else if (dead) {
-            
         }
     }
 
     draw(ctx) {
         if (!initialized) return;
-        
+        console.log("hi");
         // Check if player exists and has required properties
         if (!game.players[naem] || 
             typeof game.players[naem].x === 'undefined' || 
@@ -403,6 +446,9 @@ export class deadScene extends Scene {
     constructor() {
         super();
     }
+
+    async onLoad() {}
+    async onExit() {}
 
     update(deltaTime, commands) {
         if (commands.keys['Enter']) {

@@ -1,1 +1,5 @@
 node_modules/
+experiment/
+.mypy_cache/
+__pycache__/
+*.pyi

@@ -151,10 +151,22 @@ export class otherCtx {
         this.ctx.restore();
     }
 }
+otherCtx.prototype.setTextAlign = function (align = "left") {
+    this.ctx.textAlign = align;          // new helper
+};
 export class Scene {
+    async onLoad(commands) {
+        // Override this method in scenes to handle asynchronous initialization when the scene starts
+    }
+
+    async onExit(commands) {
+        // Override this method in scenes to handle asynchronous cleanup when the scene is exited
+    }
+
     update(deltaTime, commands) {
         // Override this method in scenes
     }
+
     draw(ctx) {
         // Override this method in scenes
     }
@@ -247,7 +259,17 @@ export class OCtxButton {
             this.drawRectBorder(ctx, this.bounds.x, this.bounds.y, this.bounds.width, this.bounds.height, this.borderColor, borderThickness, cameraPos, cameraZoom);
         }
         const textColor = this.enabled ? this.textColor : this.adjustAlpha(this.textColor, 0.5);
-        ctx.drawText(this.bounds.x + this.bounds.width / 2 + offsetX, this.bounds.y + this.bounds.height / 2 + offsetY, this.label, textColor, this.fontSize, cameraPos, cameraZoom);
+        ctx.setTextAlign("center");
+        ctx.drawText(
+            this.bounds.x + this.bounds.width / 2,
+            this.bounds.y + this.bounds.height / 2 + this.fontSize / 3,
+            this.label,
+            textColor,
+            this.fontSize,
+            cameraPos,
+            cameraZoom
+        );
+        ctx.setTextAlign("left");
     }
     isClicked(commands) {
         return this.enabled && this.isHovered && commands.mouseReleased;
@@ -407,14 +429,14 @@ export class OCtxTextField {
             // Handle special keys
             if (commands.keys["Backspace"]) {
                 this.backspaceHoldTimer += deltaTime;
-                if (commands.keys["Backspace"] && (this.backspaceHoldTimer === deltaTime || this.backspaceHoldTimer > 0.5)) {
-                    if (this.cursorPosition > 0) {
-                        this.text = this.text.slice(0, this.cursorPosition - 1) + this.text.slice(this.cursorPosition);
-                        this.cursorPosition--;
-                    }
+                const firstPress = this.backspaceHoldTimer === deltaTime;
+                const repeating  = this.backspaceHoldTimer > 0.5 &&            // start repeat
+                                   (this.backspaceHoldTimer % 0.05) < deltaTime; // 20 Hz
+                if ((firstPress || repeating) && this.cursorPosition > 0) {
+                    this.text = this.text.slice(0, this.cursorPosition - 1) + this.text.slice(this.cursorPosition);
+                    this.cursorPosition--;
                 }
-            }
-            else {
+            } else {
                 this.backspaceHoldTimer = 0;
             }
             if (commands.keys["ArrowLeft"]) {
@@ -487,7 +509,7 @@ export class OCtxTextField {
             y >= this.bounds.y && y <= this.bounds.y + this.bounds.height;
     }
 }
-class Vertex {
+export class Vertex {
     dstX;
     dstY;
     srcX;
@@ -547,9 +569,15 @@ export class Commands {
     }
     switchScene(index) {
         if (index >= 0 && index < this.scenes.length) {
-            this.currentSceneIndex = index;
-        }
-        else {
+            const currentScene = this.scenes[this.currentSceneIndex];
+            (async () => {
+                if (currentScene) {
+                    await currentScene.onExit(this); // Call onExit for the current scene
+                }
+                this.currentSceneIndex = index;
+                await this.scenes[index].onLoad(this); // Call onLoad for the new scene
+            })();
+        } else {
             console.error(`Invalid scene index: ${index}`);
         }
     }
@@ -592,3 +620,4 @@ export function contextEngine(scenes, initialSceneIndex = 0, canvasWidth = 800, 
     const startTime = performance.now();
     ctxengnloop(scenes, commands, ctx, startTime, other);
 }
+
