@@ -329,7 +329,7 @@ export class gameScene extends Scene {
     }
 
     async onLoad(commands) {
-        client = await io(`http://localhost:${PORT}${lobbyPath}`,  { transports: ['websocket'], upgrade: false });
+        client = await io(`${lobbyPath}`,  { transports: ['websocket'], upgrade: false });
         
         await this.setupListeners();
         

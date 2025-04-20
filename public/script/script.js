@@ -76,11 +76,11 @@ class menuScene extends Scene {
       this.#loading = true;      // lock until we finish
       (async () => {
         try {
-          const { path } = await fetch(`http://localhost:${PORT}/lobby`).then(r => r.json());
+          const { path } = await fetch(`/lobby`).then(r => r.json());
           lobbyPath = path;
   
           const { available } = await fetch(
-            `http://localhost:${PORT}/check-name?name=${encodeURIComponent(entered)}&lobby=${lobbyPath}`
+            `/check-name?name=${encodeURIComponent(entered)}&lobby=${lobbyPath}`
           ).then(r => r.json());
   
           if (!available) {
