@@ -123,23 +123,23 @@ export class gameScene extends Scene {
             }
 
             const playerName = data.name;
+            
+            // Ignore move events for the local player to prevent position corrections
+            if (playerName === naem) {
+                return;
+            }
+            
             const playerX = data.x;
             const playerY = data.y;
 
             // Update the player's position in the game object
             if (game.players[playerName]) {
                 // Save the current position as previous position for interpolation
-                if (playerName !== naem) {
-                    game.players[playerName].prevX = game.players[playerName].x;
-                    game.players[playerName].prevY = game.players[playerName].y;
-                    game.players[playerName].targetX = playerX;
-                    game.players[playerName].targetY = playerY;
-                    game.players[playerName].interpolationTime = 0;
-                } else {
-                    // For our own player, update directly
-                    game.players[playerName].x = playerX;
-                    game.players[playerName].y = playerY;
-                }
+                game.players[playerName].prevX = game.players[playerName].x;
+                game.players[playerName].prevY = game.players[playerName].y;
+                game.players[playerName].targetX = playerX;
+                game.players[playerName].targetY = playerY;
+                game.players[playerName].interpolationTime = 0;
             } else {
                 // If the player doesn't exist, do nothing
                 console.log(`Player ${playerName} not found in game object.`);

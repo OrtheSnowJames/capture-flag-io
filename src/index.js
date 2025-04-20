@@ -70,7 +70,7 @@ function movePlayer(player, newX, newY) {
 }
 
 // Check if the speed of the player is too high, kill if true
-function checkSpeed(x, y, newx, newy, topSpeed = 400) {
+function checkSpeed(x, y, newx, newy, topSpeed = 425) {
     const dx = Math.abs(x - newx);
     const dy = Math.abs(y - newy);
 
