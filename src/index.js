@@ -81,13 +81,6 @@ function checkSpeed(x, y, newx, newy, topSpeed = 400) {
     return false;
 }
 
-function emitWithLogging(event, message, log = true) {
-    if (log) {
-        console.log(`Emitting event: ${event}, Message:`, message);
-    }
-    io.emit(event, message);
-}
-
 // Middleware setup
 app.use(express.static('public'));
 app.use(express.json());
@@ -153,6 +146,13 @@ class GameServer {
         };
     }
 
+    emitWithLogging(event, message, log = true) {
+        if (log) {
+            console.log(`Emitting event: ${event}, Message:`, message);
+        }
+        this.io.emit(event, message);
+    }
+
     createFlag(team) {
         return {
             x: team === "red" ? 100 : 900,
@@ -186,7 +186,7 @@ class GameServer {
                     msg = censorProfanity(msg);
                 }
                 this.game.messages.push(msg);
-                emitWithLogging('message', msg);
+                this.emitWithLogging('message', msg);
             });
 
             socket.on('name', (name) => {
@@ -203,8 +203,10 @@ class GameServer {
                 this.count++; // Increment player count
                 console.log('Player added: ', player);
 
-                emitWithLogging('gameState', JSON.stringify(this.game));
-                emitWithLogging('newPlayer', JSON.stringify(player));
+                this.emitWithLogging('newPlayer', JSON.stringify(player));
+                
+                socket.emit('gameState', JSON.stringify(this.game));
+                console.log("gameState", this.game);
                 console.log("flags", this.game.flags);
             });
 
@@ -212,14 +214,14 @@ class GameServer {
                 if (typeof data === 'string') data = JSON.parse(data);
                 const player = data?.name ? this.game.players[data.name] : undefined;
                 if (player && data.killer) {
-                    emitWithLogging('kill', JSON.stringify({ player: player.name, killer: data.killer }));
+                    this.emitWithLogging('kill', JSON.stringify({ player: player.name, killer: data.killer }));
 
                     if (player.capture) {
                         const flag = this.game.flags[player.team];
                         flag.capturedBy = "";
                         flag.x = player.x;
                         flag.y = player.y;
-                        emitWithLogging('flagDropped', JSON.stringify({ player: player.name, flag: player.team === "red" ? "blue" : "red" }));
+                        this.emitWithLogging('flagDropped', JSON.stringify({ player: player.name, flag: player.team === "red" ? "blue" : "red" }));
                     }
                 }
             });
@@ -233,7 +235,7 @@ class GameServer {
                             movePlayer(player, data.x, data.y);
                         } else {
                             console.log("Player speed too high, killing player: ", player.name);
-                            emitWithLogging('kill', JSON.stringify({ player: player.name, killer: "system" }));
+                            this.emitWithLogging('kill', JSON.stringify({ player: player.name, killer: "system" }));
                             delete this.game.players[player.name];
                         }
                     }
@@ -242,7 +244,7 @@ class GameServer {
                         const otherPlayer = this.game.players[name];
                         if (otherPlayer.id !== player.id && Math.abs(player.x - otherPlayer.x) < 20 && Math.abs(player.y - otherPlayer.y) < 20) {
                             delete this.game.players[name];
-                            emitWithLogging('kill', JSON.stringify({ player: otherPlayer.name, killer: player.name }));
+                            this.emitWithLogging('kill', JSON.stringify({ player: otherPlayer.name, killer: player.name }));
                             otherPlayer.team === "red" ? this.reds-- : this.blues--;
 
                             if (otherPlayer.capture) {
@@ -250,7 +252,7 @@ class GameServer {
                                 flag.capturedBy = "";
                                 flag.x = player.x;
                                 flag.y = player.y;
-                                emitWithLogging('flagDropped', JSON.stringify({ player: otherPlayer.name, flag: otherPlayer.team }));
+                                this.emitWithLogging('flagDropped', JSON.stringify({ player: otherPlayer.name, flag: otherPlayer.team }));
                             }
                         }
                     }
@@ -259,7 +261,7 @@ class GameServer {
                     if (!player.capture && Math.abs(player.x - flag.x) < 20 && Math.abs(player.y - flag.y) < 20) {
                         player.capture = true;
                         flag.capturedBy = player.name;
-                        emitWithLogging('flagCaptured', JSON.stringify({ player: player.name, flag: flag.team }));
+                        this.emitWithLogging('flagCaptured', JSON.stringify({ player: player.name, flag: flag.team }));
                     }
 
                     const ownFlag = this.game.flags[player.team];
@@ -269,23 +271,23 @@ class GameServer {
                         ownFlag.x = player.team === "red" ? 100 : 900;
                         ownFlag.y = 250;
                         this.game.flags[player.team] = ownFlag;
-                        emitWithLogging('flagReturned', JSON.stringify({ player: player.name, flag: ownFlag.team }));
-                        emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }));
+                        this.emitWithLogging('flagReturned', JSON.stringify({ player: player.name, flag: ownFlag.team }));
+                        this.emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }));
                     }
 
                     if (player.capture) {
-                        emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: flag.team, x: player.x, y: player.y - flagHeight / 2 }));
+                        this.emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: flag.team, x: player.x, y: player.y - flagHeight / 2 }));
                     }
 
                     if (player.capture && checkCollisionPlayerFlag(player, { x: flag.team === "red" ? 900 : 100, y: 250, width: flagWidth, height: flagHeight })) {
                         player.score++;
-                        emitWithLogging('scoreUp', JSON.stringify({ player: player.name}));
+                        this.emitWithLogging('scoreUp', JSON.stringify({ player: player.name}));
                         player.capture = false;
                         flag.capturedBy = "";
                         flag.x = flag.team === "red" ? 100 : 900;
                         flag.y = 250;
-                        emitWithLogging('flagReturned', JSON.stringify({ player: player.name, flag: flag.team }));
-                        emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }))
+                        this.emitWithLogging('flagReturned', JSON.stringify({ player: player.name, flag: flag.team }));
+                        this.emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }))
                     }
                     this.io.emit('move', JSON.stringify(data));
                 }
@@ -299,7 +301,7 @@ class GameServer {
                     team === "red" ? this.reds-- : this.blues--;
                     delete this.game.players[playerName];
                     this.count--; // Decrement player count
-                    emitWithLogging('kill', JSON.stringify({ player: playerName, killer: "system" }));
+                    this.emitWithLogging('kill', JSON.stringify({ player: playerName, killer: "system" }));
                 }
             });
         });
@@ -377,7 +379,7 @@ process.stdin.on('data', (input) => {
                     if (player) {
                         console.log(`Killing player ${playerName} in lobby ${lobbyNumber}`);
                         delete lobby.server.game.players[playerName];
-                        emitWithLogging('kill', JSON.stringify({ player: playerName, killer: "system" }));
+                        this.emitWithLogging('kill', JSON.stringify({ player: playerName, killer: "system" }));
                     } else {
                         console.log(`Player ${playerName} not found in lobby ${lobbyNumber}`);
                     }
@@ -395,7 +397,7 @@ process.stdin.on('data', (input) => {
         // emit a kill event to all players
         lobbies.forEach((lobby) => {
             Object.values(lobby.server.game.players).forEach((player) => {
-                emitWithLogging('kill', JSON.stringify({ player: player.name, killer: "system" }));
+                this.emitWithLogging('kill', JSON.stringify({ player: player.name, killer: "system" }));
             });
         });
         server.close(() => {

@@ -54,7 +54,7 @@ function Task(fn) {
 
 function canMove(x, y, objectsinside, objectsoutside = []) {
     for (const obj of objectsoutside) {
-        const adjustedHeight = obj.height - 20; // Reduce height for better z-index appearance
+        const adjustedHeight = obj.height //- 20; // Reduce height for better z-index appearance
         if (
             x >= obj.x &&
             x + playerWidth <= obj.x + obj.width &&
@@ -66,7 +66,7 @@ function canMove(x, y, objectsinside, objectsoutside = []) {
     }
 
     for (const obj of objectsinside) {
-        const adjustedHeight = obj.height - 5; // Reduce height for better z-index appearance
+        const adjustedHeight = obj.height //- 5; // Reduce height for better z-index appearance
         if (
             x < obj.x ||
             x + playerWidth > obj.x + obj.width ||
@@ -107,11 +107,13 @@ export class gameScene extends Scene {
 
     setupListeners() {
         client.on('move', (data) => {
-            const dataObj = JSON.parse(data);
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
+            }
 
-            const playerName = dataObj.name;
-            const playerX = dataObj.x;
-            const playerY = dataObj.y;
+            const playerName = data.name;
+            const playerX = data.x;
+            const playerY = data.y;
 
             // Update the player's position in the game object
             if (game.players[playerName]) {
@@ -124,7 +126,8 @@ export class gameScene extends Scene {
         });
 
         client.on('message', (data) => {
-            game.messages.push(data);
+            const message = data;
+            game.messages.push(message);
             if (game.messages.length > readableMessages) {
                 game.messages.shift(); // Remove the oldest message
             }
@@ -133,32 +136,36 @@ export class gameScene extends Scene {
         client.on('newPlayer', (data) => {
             if (!initialized) {
             setTimeout(() => {
-                const dataObj = JSON.parse(data);
-                if (dataObj.name === naem) return;
-                game.players[dataObj.name] = dataObj;
+                if (typeof data === 'string') {
+                    data = JSON.parse(data);
+                }
+                if (data.name === naem) return;
+                game.players[data.name] = data;
             }, 100); // retry after 100ms
             return;
             }
 
             if (!data) return;
             if (data.name === naem) return;
-
-            const dataObj = JSON.parse(data);
-            game.players[dataObj.name] = dataObj;
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
+            }
+            game.players[data.name] = data;
         });
 
         client.on('kill', (data) => {
-            const dataObj = JSON.parse(data);
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
+            }
             // Remove the killed player from the game object
 
-            if (game.players[dataObj.player]) {
-                delete game.players[dataObj.player];
-                console.log("player killed", dataObj.player);
+            if (game.players[data.player]) {
+                delete game.players[data.player];
             }
 
-            if (game.players[dataObj.killer] && dataObj.killer !== "system")   game.players[dataObj.killer].score++;
+            if (game.players[data.killer] && data.killer !== "system")   game.players[data.killer].score++;
 
-            if (game.players[dataObj.player].name === naem) {
+            if (game.players[data.player].name === naem) {
                 // we need to leave this scene
                 initialized = false;
                 dead = true;
@@ -170,35 +177,43 @@ export class gameScene extends Scene {
         });
 
         client.on('flagCaptured', (data) => {
-            const dataObj = JSON.parse(data);
-            if (dataObj.flag in game.flags) {
-                game.flags[dataObj.flag].capturedBy = dataObj.player;
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
+            }
+            if (data.flag in game.flags) {
+                game.flags[data.flag].capturedBy = data.player;
             }
         });
 
         client.on('flagDropped', (data) => {
-            const dataObj = JSON.parse(data);
-            if (dataObj.flag in game.flags) {
-                game.flags[dataObj.flag].capturedBy = "";
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
+            }
+            if (data.flag in game.flags) {
+                game.flags[data.flag].capturedBy = "";
             }
         });
 
         client.on('flagMoved', (data) => {
-            const dataObj = JSON.parse(data);
-            if (dataObj.flag in game.flags) {
-                console.log("moving flag", dataObj.flag.team);
-                game.flags[dataObj.flag].x = dataObj.x;
-                game.flags[dataObj.flag].y = dataObj.y;
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
             }
+            if (data.flag in game.flags) {
+                game.flags[data.flag].x = data.x;
+                game.flags[data.flag].y = data.y;
+            }
+            console.log("flag moved");
         });
 
         client.on('flagReturned', (data) => {
-            const dataObj = JSON.parse(data);
-            if (dataObj.flag in game.flags) {
-                game.flags[dataObj.flag].capturedBy = "";
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
+            }
+            if (data.flag in game.flags) {
+                game.flags[data.flag].capturedBy = "";
 
                 // move back to the base
-                if (dataObj.flag === "red") {
+                if (data.flag === "red") {
                     game.flags.red.x = 100;
                     game.flags.red.y = 250;
                 } else {
@@ -208,48 +223,42 @@ export class gameScene extends Scene {
             }
 
             // make player = no capture
-            if (game.players[dataObj.player]) {
-                game.players[dataObj.player].capture = false;
+            if (game.players[data.player]) {
+                game.players[data.player].capture = false;
             }
         });
 
         client.on('scoreUp', (data) => {
-            const dataObj = JSON.parse(data);
-            if (dataObj.player in game.players) {
-                game.players[dataObj.player].score++;
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
+            }
+            if (data.player in game.players) {
+                game.players[data.player].score++;
             }
         })
+
+        client.on('gameState', (data) => {
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
+            }
+            
+            game = data;
+            initialized = true;
+        });
+
+        client.on('connect', () => {
+            getClient = true;
+        });
     }
 
     async onLoad(commands) {
-        console.log("connecting to: ", `localhost:${PORT}${lobbyPath}`);
         client = await io(`http://localhost:${PORT}${lobbyPath}`,  { transports: ['websocket'], upgrade: false });
         
-        this.setupListeners();
-
-        await (() => {
-            client.on('gameState', (data) => {
-                if (typeof data === 'string') {
-                    data = JSON.parse(data);
-                }
-                
-                console.log("gameState", data);
-                game = data
-                initialized = true;
-            });
-
-            client.on('connect', () => {
-                console.log("connected to server");
-                getClient = true;
-            });
-
-        })();
-
-        // wait until setupListeners is done
-        while (!getClient && !initialized) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        client.emit('name', naem);
+        await this.setupListeners();
+        
+        setTimeout(() => {
+            client.emit('name', naem);
+        }, 100);
     }
 
     async onExit(commands) {
@@ -335,7 +344,6 @@ export class gameScene extends Scene {
                     game.players[naem].x = newX;
                     game.players[naem].y = newY;
                     client.emit('move', JSON.stringify({ name: naem, x: newX, y: newY }));
-                    console.log("moved", naem, newX, newY);
                 }
             }
 
@@ -355,7 +363,6 @@ export class gameScene extends Scene {
 
     draw(ctx) {
         if (!initialized) return;
-        console.log("hi");
         // Check if player exists and has required properties
         if (!game.players[naem] || 
             typeof game.players[naem].x === 'undefined' || 
