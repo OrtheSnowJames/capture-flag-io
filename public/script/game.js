@@ -94,8 +94,8 @@ let game = {
 let getClient = false;
 let sendName = false; 
 export class gameScene extends Scene {
-    messageField = new OCtxTextField(0, readableMessages * 30, 500, 30, 500/20);
-    submitButton = new OCtxButton(520, readableMessages * 30, 100, 30, "Send");
+    messageField = new OCtxTextField(0, readableMessages * 30, 500, 60, 500/20);
+    submitButton = new OCtxButton(520, readableMessages * 30, 100, 60, "Send");
     constructor() {
         super();
         this.init();
@@ -284,13 +284,13 @@ export class gameScene extends Scene {
             let newY = game.players[naem].y;
 
             // UI
-            this.messageField.update(deltaTime, commands);
+            this.messageField.update(commands, deltaTime);
             if (this.messageField.isActive) {
                 console.log("message field active");
             }
             this.submitButton.update(commands);
 
-            if (this.submitButton.isClicked(commands)) {
+            if (this.submitButton.isClicked(commands) && this.messageField.getText() !== "") {
                 const message = this.messageField.getText();
                 if (message !== undefined) {
                     client.emit('message', JSON.stringify(`${naem} said ${message}`)); 
@@ -436,9 +436,11 @@ export class gameScene extends Scene {
                 false
             );
 
-            for (let message of game.messages) {
-                const messageIndex = game.messages.indexOf(message);
-                const messageY = messageBoxHeight - (messageIndex + 1) * 30;
+            // Display messages from bottom to top (newest at bottom)
+            const displayMessages = [...game.messages].slice(-readableMessages); // Get last N messages
+            for (let i = 0; i < displayMessages.length; i++) {
+                const message = displayMessages[i];
+                const messageY = (i + 1) * 30 - 10; // -10 to adjust text position vertically
                 ctx.drawText(5, messageY, message, "white", 20, false, false);
             }
 
