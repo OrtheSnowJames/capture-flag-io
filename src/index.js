@@ -272,7 +272,7 @@ class GameServer {
                         ownFlag.y = 250;
                         this.game.flags[player.team] = ownFlag;
                         this.emitWithLogging('flagReturned', JSON.stringify({ player: player.name, flag: ownFlag.team }));
-                        this.emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }));
+                        // this.emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }));
                     }
 
                     if (player.capture) {
@@ -287,7 +287,7 @@ class GameServer {
                         flag.x = flag.team === "red" ? 100 : 900;
                         flag.y = 250;
                         this.emitWithLogging('flagReturned', JSON.stringify({ player: player.name, flag: flag.team }));
-                        this.emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }))
+                        // this.emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }))
                     }
                     this.io.emit('move', JSON.stringify(data));
                 }

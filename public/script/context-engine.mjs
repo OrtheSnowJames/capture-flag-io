@@ -531,6 +531,7 @@ export class Vertex {
 }
 export class Commands {
     scenes;
+    globals = {}; // global variables across all scenes, ex {"playerSocket": client}
     currentSceneIndex;
     keys = {};
     mouseX = 0;

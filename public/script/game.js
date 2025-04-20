@@ -19,6 +19,10 @@ const readableMessages = 7; // num * 30 = how much px is the message box
 const fieldWidth = 1000;
 const fieldHeight = 500;
 
+// Movement update throttling
+const movementUpdateRate = 100; // Send movement updates every 100ms
+let lastMovementUpdate = 0;
+
 const dashMultiplier = 3;
 const dashDuration = 0.5; // seconds
 const dashCooldown = 5; // seconds
@@ -80,6 +84,11 @@ function canMove(x, y, objectsinside, objectsoutside = []) {
     return true; // Valid position
 }
 
+// Interpolation helper function
+function lerp(start, end, t) {
+    return start + (end - start) * t;
+}
+
 let dead = false;
 
 let game = {
@@ -96,9 +105,11 @@ let sendName = false;
 export class gameScene extends Scene {
     messageField = new OCtxTextField(0, readableMessages * 30, 500, 60, 500/20);
     submitButton = new OCtxButton(520, readableMessages * 30, 100, 60, "Send");
+    
     constructor() {
         super();
         this.init();
+        this.interpolationTime = 0;
     }
 
     init() {
@@ -117,8 +128,18 @@ export class gameScene extends Scene {
 
             // Update the player's position in the game object
             if (game.players[playerName]) {
-                game.players[playerName].x = playerX;
-                game.players[playerName].y = playerY;
+                // Save the current position as previous position for interpolation
+                if (playerName !== naem) {
+                    game.players[playerName].prevX = game.players[playerName].x;
+                    game.players[playerName].prevY = game.players[playerName].y;
+                    game.players[playerName].targetX = playerX;
+                    game.players[playerName].targetY = playerY;
+                    game.players[playerName].interpolationTime = 0;
+                } else {
+                    // For our own player, update directly
+                    game.players[playerName].x = playerX;
+                    game.players[playerName].y = playerY;
+                }
             } else {
                 // If the player doesn't exist, do nothing
                 console.log(`Player ${playerName} not found in game object.`);
@@ -140,6 +161,12 @@ export class gameScene extends Scene {
                     data = JSON.parse(data);
                 }
                 if (data.name === naem) return;
+                // Add interpolation properties
+                data.prevX = data.x;
+                data.prevY = data.y;
+                data.targetX = data.x;
+                data.targetY = data.y;
+                data.interpolationTime = 0;
                 game.players[data.name] = data;
             }, 100); // retry after 100ms
             return;
@@ -150,6 +177,12 @@ export class gameScene extends Scene {
             if (typeof data === 'string') {
                 data = JSON.parse(data);
             }
+            // Add interpolation properties
+            data.prevX = data.x;
+            data.prevY = data.y;
+            data.targetX = data.x;
+            data.targetY = data.y;
+            data.interpolationTime = 0;
             game.players[data.name] = data;
         });
 
@@ -165,7 +198,7 @@ export class gameScene extends Scene {
 
             if (game.players[data.killer] && data.killer !== "system")   game.players[data.killer].score++;
 
-            if (game.players[data.player].name === naem) {
+            if (game.players[data.player]?.name === naem) {
                 // we need to leave this scene
                 initialized = false;
                 dead = true;
@@ -199,10 +232,20 @@ export class gameScene extends Scene {
                 data = JSON.parse(data);
             }
             if (data.flag in game.flags) {
-                game.flags[data.flag].x = data.x;
-                game.flags[data.flag].y = data.y;
+                // Add interpolation for flags too
+                game.flags[data.flag].prevX = game.flags[data.flag].x;
+                game.flags[data.flag].prevY = game.flags[data.flag].y;
+                game.flags[data.flag].targetX = data.x;
+                game.flags[data.flag].targetY = data.y;
+                game.flags[data.flag].interpolationTime = 0;
+                
+                // Ensure we immediately update if flag is captured
+                if (game.flags[data.flag].capturedBy) {
+                    game.flags[data.flag].x = data.x;
+                    game.flags[data.flag].y = data.y;
+                }
             }
-            console.log("flag moved");
+            console.log("flag moved", data);
         });
 
         client.on('flagReturned', (data) => {
@@ -212,13 +255,27 @@ export class gameScene extends Scene {
             if (data.flag in game.flags) {
                 game.flags[data.flag].capturedBy = "";
 
-                // move back to the base
+                // Directly teleport flag back to the base - no interpolation
                 if (data.flag === "red") {
+                    // Set both target and current position to the same value to prevent interpolation
                     game.flags.red.x = 100;
                     game.flags.red.y = 250;
+                    game.flags.red.prevX = 100;
+                    game.flags.red.prevY = 250;
+                    game.flags.red.targetX = 100;
+                    game.flags.red.targetY = 250;
+                    // Skip interpolation by setting time to 1
+                    game.flags.red.interpolationTime = 1;
                 } else {
+                    // Set both target and current position to the same value to prevent interpolation
                     game.flags.blue.x = 900;
                     game.flags.blue.y = 250;
+                    game.flags.blue.prevX = 900;
+                    game.flags.blue.prevY = 250;
+                    game.flags.blue.targetX = 900;
+                    game.flags.blue.targetY = 250;
+                    // Skip interpolation by setting time to 1
+                    game.flags.blue.interpolationTime = 1;
                 }
             }
 
@@ -241,6 +298,26 @@ export class gameScene extends Scene {
             if (typeof data === 'string') {
                 data = JSON.parse(data);
             }
+            
+            // Initialize interpolation values for each player
+            Object.keys(data.players).forEach(playerName => {
+                const player = data.players[playerName];
+                player.prevX = player.x;
+                player.prevY = player.y;
+                player.targetX = player.x;
+                player.targetY = player.y;
+                player.interpolationTime = 0;
+            });
+            
+            // Initialize interpolation values for flags
+            Object.keys(data.flags).forEach(flagName => {
+                const flag = data.flags[flagName];
+                flag.prevX = flag.x;
+                flag.prevY = flag.y;
+                flag.targetX = flag.x;
+                flag.targetY = flag.y;
+                flag.interpolationTime = 0;
+            });
             
             game = data;
             initialized = true;
@@ -343,9 +420,55 @@ export class gameScene extends Scene {
                 if (canMove(newX, newY, objects, [middleCube])) {
                     game.players[naem].x = newX;
                     game.players[naem].y = newY;
-                    client.emit('move', JSON.stringify({ name: naem, x: newX, y: newY }));
+                    
+                    // Only send movement updates at the specified rate
+                    const now = performance.now();
+                    if (now - lastMovementUpdate > movementUpdateRate) {
+                        client.emit('move', JSON.stringify({ name: naem, x: newX, y: newY }));
+                        lastMovementUpdate = now;
+                    }
                 }
             }
+
+            // Update interpolation for other players
+            Object.keys(game.players).forEach(playerName => {
+                if (playerName !== naem) {
+                    const player = game.players[playerName];
+                    // Increase interpolation time
+                    player.interpolationTime += deltaTime * 5; // Adjust speed factor as needed
+                    
+                    // Clamp interpolation time to [0, 1]
+                    if (player.interpolationTime > 1) player.interpolationTime = 1;
+                    
+                    // Interpolate position
+                    player.x = lerp(player.prevX, player.targetX, player.interpolationTime);
+                    player.y = lerp(player.prevY, player.targetY, player.interpolationTime);
+                }
+            });
+
+            // Update interpolation for flags
+            Object.keys(game.flags).forEach(flagName => {
+                const flag = game.flags[flagName];
+                if (flag.interpolationTime !== undefined) {
+                    // Increase interpolation time
+                    flag.interpolationTime += deltaTime * 5; // Adjust speed factor as needed
+                    
+                    // Clamp interpolation time to [0, 1]
+                    if (flag.interpolationTime > 1) flag.interpolationTime = 1;
+                    
+                    // Don't interpolate if flag is being carried
+                    if (!flag.capturedBy) {
+                        // Interpolate position
+                        flag.x = lerp(flag.prevX, flag.targetX, flag.interpolationTime);
+                        flag.y = lerp(flag.prevY, flag.targetY, flag.interpolationTime);
+                    } else if (game.players[flag.capturedBy]) {
+                        // If flag is captured, make it follow the player directly
+                        const player = game.players[flag.capturedBy];
+                        flag.x = player.x;
+                        flag.y = player.y - flagHeight / 2;
+                    }
+                }
+            });
 
             // Create an array of objects sorted by zIndex
             const renderObjects = [
@@ -389,12 +512,19 @@ export class gameScene extends Scene {
         if (game.flags) {
             Object.values(game.flags).forEach(flag => {
                 if (flag && typeof flag.x !== 'undefined' && typeof flag.y !== 'undefined') {
+                    // If flag is captured, update its position to follow the capturing player
+                    if (flag.capturedBy && game.players[flag.capturedBy]) {
+                        const player = game.players[flag.capturedBy];
+                        flag.x = player.x;
+                        flag.y = player.y - flagHeight / 2;
+                    }
+                    
                     ctx.drawImageScaled(flag.team === "red" ? redFlagImage : blueFlagImage, flag.x, flag.y, flagWidth, flagHeight);
 
                     if (flag.capturedBy) {
                         const player = game.players[flag.capturedBy];
                         if (player && player.x && player.y) {
-                            ctx.drawLine(flag.x, flag.y + flagHeight / 2, player.x + playerWidth / 2, player.y + playerHeight / 2, "purple");
+                            ctx.drawLine(flag.x + flagWidth/2, flag.y + flagHeight / 2, player.x + playerWidth / 2, player.y + playerHeight / 2, "purple");
                         }
                     }
                 }
