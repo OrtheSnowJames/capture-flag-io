@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { otherCtx, contextEngine, Commands, Scene, OCtxButton, OCtxTextField } from "./context-engine.mjs";
-import { naem, lobbyPath } from "./script.js";
+import { naem, lobbyPath, CANVAS_WIDTH, CANVAS_HEIGHT } from "./script.js";
 
 // filepath: /home/james/Documents/capture-flag-io/node/public/script/game.js
 
@@ -356,6 +356,7 @@ export class gameScene extends Scene {
 
     update(deltaTime, commands) {
         if (initialized) {
+            try {
             let moved = false;
             let newX = game.players[naem].x;
             let newY = game.players[naem].y;
@@ -480,7 +481,12 @@ export class gameScene extends Scene {
 
             renderObjects.sort((a, b) => a.zIndex - b.zIndex);
 
-            this.sortedObjects = renderObjects; // Store for use in draw or other methods
+                this.sortedObjects = renderObjects; // Store for use in draw or other methods
+            } catch (e) {
+                // exit the scene to the death scene, add reason to globals
+                commands.globals.reason = "Client side error, may be death, for nerds: " + e;
+                commands.switchScene(2);
+            }
         }
     }
 
@@ -582,14 +588,28 @@ export class gameScene extends Scene {
 }
 
 export class deadScene extends Scene {
+    reason = "";
+    showTechnicalDetails = false;
+    detailsButton = new OCtxButton(CANVAS_WIDTH / 2 - 150, CANVAS_HEIGHT * 0.4, 300, 60, "Show Technical Details");
+
     constructor() {
         super();
     }
 
-    async onLoad() {}
-    async onExit() {}
+    async onLoad(commands) {
+        this.reason = commands.globals.reason;
+        this.showTechnicalDetails = false;
+    }
+    async onExit(commands) {}
 
     update(deltaTime, commands) {
+        this.detailsButton.update(commands);
+        
+        if (this.detailsButton.isClicked(commands)) {
+            this.showTechnicalDetails = !this.showTechnicalDetails;
+            this.detailsButton.label = this.showTechnicalDetails ? "Hide Technical Details" : "Show Technical Details";
+        }
+        
         if (commands.keys['Enter']) {
             window.location.reload();
         }
@@ -597,8 +617,39 @@ export class deadScene extends Scene {
 
     draw(ctx) {
         ctx.setCamera(0, 0);
+        ctx.setZoom(1);
         ctx.clearBackground('black');
+        
+        // Main death message
         ctx.drawText(CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166, CANVAS_HEIGHT * 0.1, "You are dead.", "white", 50);
         ctx.drawText(CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166, CANVAS_HEIGHT * 0.2, "Press Enter to reload and pick a new name.", "white", 30);
+        
+        // Extract and display user-friendly reason
+        let userFriendlyReason = "Unknown cause of death.";
+        let technicalDetails = "";
+        
+        if (this.reason && this.reason !== "") {
+            const nerdsIndex = this.reason.indexOf("for nerds:");
+            if (nerdsIndex !== -1) {
+                userFriendlyReason = this.reason.substring(0, nerdsIndex).trim();
+                technicalDetails = this.reason.substring(nerdsIndex);
+            } else {
+                userFriendlyReason = this.reason;
+            }
+        }
+        
+        // Display user-friendly reason
+        ctx.drawText(CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166, CANVAS_HEIGHT * 0.3, userFriendlyReason, "white", 30);
+        
+        // Draw the details button
+        this.detailsButton.draw(ctx);
+        
+        // Display technical details only when showTechnicalDetails is true
+        if (this.showTechnicalDetails && technicalDetails !== "") {
+            const lines = technicalDetails.split('\n');
+            for (let i = 0; i < lines.length; i++) {
+                ctx.drawText(20, CANVAS_HEIGHT * 0.5 + (i * 30), lines[i], "#aaaaaa", 18);
+            }
+        }
     }
 }

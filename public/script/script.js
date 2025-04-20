@@ -7,8 +7,8 @@ import { gameScene, deadScene } from "./game.js";
 export let naem = ""; // Exported variable to hold the player's name
 export let lobbyPath = ""; // Exported variable to hold the lobby path
 let switched = false;
-const CANVAS_WIDTH = 1600;
-const CANVAS_HEIGHT = 800;
+export const CANVAS_WIDTH = 1600;
+export const CANVAS_HEIGHT = 800;
 const PORT = 4566;
 let coverart = new Image();
 coverart.src = "/assets/coverart.png";
