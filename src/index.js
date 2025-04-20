@@ -22,7 +22,7 @@ const server = http.createServer(app);
 // Create a single Socket.IO server instance
 const io = new Server(server, {
     cors: {
-        origin: "http://localhost:34989", // Replace with your client origin
+        origin: "http://localhost:4566",
         methods: ["GET", "POST"],
     },
 });
@@ -186,6 +186,10 @@ class GameServer {
                     msg = censorProfanity(msg);
                 }
                 this.game.messages.push(msg);
+                // if the messages array is greater than 10, remove the oldest message
+                if (this.game.messages.length > 10) {
+                    this.game.messages.shift();
+                }
                 this.emitWithLogging('message', msg);
             });
 
@@ -214,6 +218,11 @@ class GameServer {
                 if (typeof data === 'string') data = JSON.parse(data);
                 const player = data?.name ? this.game.players[data.name] : undefined;
                 if (player && data.killer) {
+                    if (player.team === "red") {
+                        this.reds--;
+                    } else {
+                        this.blues--;
+                    }
                     this.emitWithLogging('kill', JSON.stringify({ player: player.name, killer: data.killer }));
 
                     if (player.capture) {
@@ -235,6 +244,11 @@ class GameServer {
                             movePlayer(player, data.x, data.y);
                         } else {
                             console.log("Player speed too high, killing player: ", player.name);
+                            if (player.team === "red") {
+                                this.reds--;
+                            } else {
+                                this.blues--;
+                            }
                             this.emitWithLogging('kill', JSON.stringify({ player: player.name, killer: "system" }));
                             delete this.game.players[player.name];
                         }
@@ -244,8 +258,12 @@ class GameServer {
                         const otherPlayer = this.game.players[name];
                         if (otherPlayer.id !== player.id && Math.abs(player.x - otherPlayer.x) < 20 && Math.abs(player.y - otherPlayer.y) < 20) {
                             delete this.game.players[name];
+                            if (otherPlayer.team === "red") {
+                                this.reds--;
+                            } else {
+                                this.blues--;
+                            }
                             this.emitWithLogging('kill', JSON.stringify({ player: otherPlayer.name, killer: player.name }));
-                            otherPlayer.team === "red" ? this.reds-- : this.blues--;
 
                             if (otherPlayer.capture) {
                                 const flag = this.game.flags[player.team];

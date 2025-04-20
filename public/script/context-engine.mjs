@@ -404,6 +404,36 @@ export class OCtxTextField {
     isUneditable() {
         return this.uneditable;
     }
+    
+    async handlePaste() {
+        try {
+            // Get text from clipboard
+            const clipboardText = await navigator.clipboard.readText();
+            
+            if (clipboardText && this.text.length + clipboardText.length <= this.maxLength) {
+                // Insert clipboard text at cursor position
+                this.text = this.text.slice(0, this.cursorPosition) + 
+                            clipboardText + 
+                            this.text.slice(this.cursorPosition);
+                            
+                // Update cursor position
+                this.cursorPosition += clipboardText.length;
+            } else if (clipboardText) {
+                // If text would exceed max length, insert as much as possible
+                const availableSpace = this.maxLength - this.text.length;
+                if (availableSpace > 0) {
+                    const truncatedPaste = clipboardText.substring(0, availableSpace);
+                    this.text = this.text.slice(0, this.cursorPosition) + 
+                                truncatedPaste + 
+                                this.text.slice(this.cursorPosition);
+                    this.cursorPosition += truncatedPaste.length;
+                }
+            }
+        } catch (error) {
+            console.error("Failed to read clipboard contents:", error);
+        }
+    }
+    
     update(commands, deltaTime) {
         if (this.uneditable)
             return;
@@ -416,6 +446,12 @@ export class OCtxTextField {
             console.log(commands.mouseX, commands.mouseY, this.bounds.x, this.bounds.y, this.bounds.width, this.bounds.height);
         }
         if (this.isActive) {
+            // Handle Ctrl+V for paste
+            if (commands.keys['v'] && (commands.keys['Control'] || commands.keys['Meta'])) {
+                (async () => {this.handlePaste();})();
+                commands.keys['v'] = false; // Consume the key
+            }
+            
             // Handle character input
             for (const key in commands.keys) {
                 if (commands.keys[key] && key.length === 1) {
@@ -431,7 +467,7 @@ export class OCtxTextField {
                 this.backspaceHoldTimer += deltaTime;
                 const firstPress = this.backspaceHoldTimer === deltaTime;
                 const repeating  = this.backspaceHoldTimer > 0.5 &&            // start repeat
-                                   (this.backspaceHoldTimer % 0.05) < deltaTime; // 20 Hz
+                                   (this.backspaceHoldTimer % 0.05) < deltaTime; // 20 Hz
                 if ((firstPress || repeating) && this.cursorPosition > 0) {
                     this.text = this.text.slice(0, this.cursorPosition - 1) + this.text.slice(this.cursorPosition);
                     this.cursorPosition--;
