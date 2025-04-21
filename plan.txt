@@ -1,0 +1,2 @@
+The plan for maps is to have 5 minutes for each map. The winning team will be shown, but only the player with the most score will be able to choose the next map.
+You're thinking, "But then the winning team will mean nothing!" Yeah, that's true. But it also makes the game more skill-based, which is one of the main focuses of this game.

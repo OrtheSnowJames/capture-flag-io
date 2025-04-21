@@ -150,6 +150,14 @@ export class otherCtx {
         this.ctx.drawImage(image, -(width * zoom) / 2, -(height * zoom) / 2, width * zoom, height * zoom);
         this.ctx.restore();
     }
+    drawTriangle(x1, y1, x2, y2, x3, y3, color, cameraPos = true, cameraZoom = true) {
+        const points = [
+            { x: x1, y: y1 },
+            { x: x2, y: y2 },
+            { x: x3, y: y3 }
+        ];
+        this.drawPolygon(points, color, cameraPos, cameraZoom);
+    }
 }
 otherCtx.prototype.setTextAlign = function (align = "left") {
     this.ctx.textAlign = align;          // new helper
@@ -419,7 +427,7 @@ export class OCtxTextField {
                 // Update cursor position
                 this.cursorPosition += clipboardText.length;
             } else if (clipboardText) {
-                // If text would exceed max length, insert as much as possible
+                // If text would exceed max length, insert as much as possible.
                 const availableSpace = this.maxLength - this.text.length;
                 if (availableSpace > 0) {
                     const truncatedPaste = clipboardText.substring(0, availableSpace);
@@ -443,7 +451,6 @@ export class OCtxTextField {
         }
         if (commands.mouseReleased) {
             this.isActive = this.pointInRect(commands.mouseX, commands.mouseY);
-            console.log(commands.mouseX, commands.mouseY, this.bounds.x, this.bounds.y, this.bounds.width, this.bounds.height);
         }
         if (this.isActive) {
             // Handle Ctrl+V for paste

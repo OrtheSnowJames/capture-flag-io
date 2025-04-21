@@ -1,0 +1,17 @@
+{
+    "map1": {
+        "name": "OG Map",
+        "objects": [
+            {
+                "type": "rect",
+                "x": "canvasWidth / 2",
+                "y": "canvasHeight / 2 - playerHeight * 2",
+                "width": "playerWidth * 4",
+                "height": "playerHeight * 4",
+                "color": "#4f4d40"
+            }
+        ],
+        "bg": "#4f4d4a",
+        "outbg": "#918777"
+    }
+}

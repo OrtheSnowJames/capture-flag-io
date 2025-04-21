@@ -4,6 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>capture-flag.io</title>
+    <style>
+        body {
+            background-image: url("/assets/blurcover.png");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        
+        canvas {
+            box-shadow: 0 0 100px 20px rgba(255, 255, 255, 0.7);
+            border-radius: 8px;
+            position: relative;
+            z-index: 10;
+        }
+    </style>
 </head>
 <body>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>

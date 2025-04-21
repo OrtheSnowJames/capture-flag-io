@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { otherCtx, contextEngine, Commands, Scene, OCtxButton, OCtxTextField } from "./context-engine.mjs";
-import { naem, lobbyPath, CANVAS_WIDTH, CANVAS_HEIGHT } from "./script.js";
+import { naem, lobbyPath, timeData, CANVAS_WIDTH, CANVAS_HEIGHT } from "./script.js";
 
 // filepath: /home/james/Documents/capture-flag-io/node/public/script/game.js
 
@@ -19,9 +19,18 @@ const readableMessages = 7; // num * 30 = how much px is the message box
 const fieldWidth = 1000;
 const fieldHeight = 500;
 
+// Maps 
+let maps = {};
+let currentMapData = null;
+let mapObjects = [];
+
 // Movement update throttling
 const movementUpdateRate = 100; // Send movement updates every 100ms
 let lastMovementUpdate = 0;
+
+// Add a playerMessages object to track messages with timestamps
+let playerMessages = {};
+const MESSAGE_DISPLAY_DURATION = 5000; // 5 seconds in milliseconds
 
 const dashMultiplier = 3;
 const dashDuration = 0.5; // seconds
@@ -36,6 +45,7 @@ let redFlagImage = new Image(25, 100);
 let blueFlagImage = new Image(25, 100);
     blueFlagImage.src = "/assets/blueflag.png";
 
+// Default field - dimensions will come from the map data
 const field = {
     x: 0,
     y: 0,
@@ -43,12 +53,91 @@ const field = {
     height: fieldHeight,
 };
 
-const middleCube = {
-    x: fieldWidth / 2 - playerWidth / 2,
-    y: fieldHeight / 2 - playerHeight / 2,
-    width: playerWidth * 4,
-    height: playerHeight * 4,
-};
+// Load maps from JSON file
+async function loadMaps() {
+    try {
+        const response = await fetch('/assets/maps.json');
+        maps = await response.json();
+        console.log("Maps loaded:", maps);
+        return true;
+    } catch (error) {
+        console.error("Error loading maps:", error);
+        return false;
+    }
+}
+
+// Parse map data and create game objects
+function parseMap(mapName) {
+    if (!maps[mapName]) {
+        console.error(`Map ${mapName} not found`);
+        return false;
+    }
+    
+    const map = maps[mapName];
+    currentMapData = map;
+    
+    // Set backgrounds
+    field.bg = map.bg || "#4f4d4a";
+    field.outbg = map.outbg || "#918777";
+    
+    // Clear existing map objects
+    mapObjects = [];
+    
+    // Parse and create map objects
+    if (map.objects && Array.isArray(map.objects)) {
+        map.objects.forEach(obj => {
+            // Evaluate expressions for coordinates and dimensions
+            // This allows values like "canvasWidth / 2" in the JSON
+            try {
+                // Create a function to safely evaluate expressions with our variables
+                const evalInContext = (expr, context) => {
+                    // Create parameter names and values arrays
+                    const paramNames = Object.keys(context);
+                    const paramValues = Object.values(context);
+                    
+                    // Create a new function with those parameters that returns the evaluated expression
+                    const evaluator = new Function(...paramNames, `return ${expr};`);
+                    
+                    // Call the function with our context values
+                    return evaluator(...paramValues);
+                };
+                
+                // Context containing our variables
+                const evalContext = {
+                    canvasWidth: fieldWidth,
+                    canvasHeight: fieldHeight,
+                    playerWidth: playerWidth,
+                    playerHeight: playerHeight
+                };
+                
+                // Evaluate each property if it's a string expression
+                const x = typeof obj.x === 'string' ? 
+                    evalInContext(obj.x, evalContext) : obj.x;
+                const y = typeof obj.y === 'string' ? 
+                    evalInContext(obj.y, evalContext) : obj.y;
+                const width = typeof obj.width === 'string' ? 
+                    evalInContext(obj.width, evalContext) : obj.width;
+                const height = typeof obj.height === 'string' ? 
+                    evalInContext(obj.height, evalContext) : obj.height;
+                
+                mapObjects.push({
+                    type: obj.type,
+                    x: x,
+                    y: y,
+                    width: width,
+                    height: height,
+                    color: obj.color,
+                    collide: obj.collide !== false // Objects are collidable by default
+                });
+            } catch (e) {
+                console.error("Error parsing map object:", e, obj);
+            }
+        });
+    }
+    
+    console.log("Map parsed:", mapName, mapObjects);
+    return true;
+}
 
 function Task(fn) {
     (async () => {
@@ -56,28 +145,53 @@ function Task(fn) {
     });
 }
 
-function canMove(x, y, objectsinside, objectsoutside = []) {
+function canMove(x, y, objectsinside = [], objectsoutside = []) {
+    // Check if inside play field bounds
+    if (x < 0 || x + playerWidth > field.width || y < 0 || y + playerHeight > field.height) {
+        return false;
+    }
+    
+    // Check collision with "outside" objects (can't be inside these)
     for (const obj of objectsoutside) {
-        const adjustedHeight = obj.height //- 20; // Reduce height for better z-index appearance
-        if (
-            x >= obj.x &&
+        if (x >= obj.x &&
             x + playerWidth <= obj.x + obj.width &&
             y >= obj.y &&
-            y + playerHeight <= obj.y + adjustedHeight
-        ) {
+            y + playerHeight <= obj.y + obj.height) {
             return false; // Inside an object you cannot be inside of
         }
     }
 
+    // Check collision with "inside" objects (must stay inside these)
     for (const obj of objectsinside) {
-        const adjustedHeight = obj.height //- 5; // Reduce height for better z-index appearance
-        if (
-            x < obj.x ||
+        if (x < obj.x ||
             x + playerWidth > obj.x + obj.width ||
             y < obj.y ||
-            y + playerHeight > obj.y + adjustedHeight
-        ) {
-            return false; // Outside an object you cannot be outside of
+            y + playerHeight > obj.y + obj.height) {
+            return false; // Outside an object you must be inside of
+        }
+    }
+    
+    // Check collision with map objects (that aren't already in objectsinside/objectsoutside)
+    for (const obj of mapObjects) {
+        // Skip non-collidable objects
+        if (obj.collide === false) continue;
+        
+        // Skip objects that are already checked in objectsinside or objectsoutside
+        const isAlreadyChecked = [...objectsinside, ...objectsoutside].some(checkedObj => 
+            checkedObj.x === obj.x && 
+            checkedObj.y === obj.y && 
+            checkedObj.width === obj.width && 
+            checkedObj.height === obj.height
+        );
+        
+        if (isAlreadyChecked) continue;
+        
+        // Default behavior is to treat map objects as "outside" objects (can't be inside)
+        if (x >= obj.x &&
+            x + playerWidth <= obj.x + obj.width &&
+            y >= obj.y &&
+            y + playerHeight <= obj.y + obj.height) {
+            return false; // Inside a map object you cannot be inside of
         }
     }
 
@@ -98,6 +212,7 @@ let game = {
         blue: { x: 899, y: 250, color: "blue", team: "blue", capturedBy: "" },
     },
     messages: [],
+    currentMap: "map1" // Default map
 };
 
 let getClient = false;
@@ -110,6 +225,9 @@ export class gameScene extends Scene {
         super();
         this.init();
         this.interpolationTime = 0;
+        this.mapsLoaded = false;
+        this.loadedMap = null;
+        this.timestamp = new timeData(5 * 60); // 5 minutes
     }
 
     init() {
@@ -152,6 +270,19 @@ export class gameScene extends Scene {
             if (game.messages.length > readableMessages) {
                 game.messages.shift(); // Remove the oldest message
             }
+            
+            // Extract player name from message format "playername said message"
+            const match = message.match(/^(.+?) said (.+)$/);
+            if (match && match.length === 3) {
+                const playerName = match[1];
+                const messageText = match[2];
+                
+                // Store the message with timestamp
+                playerMessages[playerName] = {
+                    text: messageText,
+                    timestamp: performance.now()
+                };
+            }
         });
 
         client.on('newPlayer', (data) => {
@@ -177,9 +308,6 @@ export class gameScene extends Scene {
             if (typeof data === 'string') {
                 data = JSON.parse(data);
             }
-            // Add interpolation properties
-            data.prevX = data.x;
-            data.prevY = data.y;
             data.targetX = data.x;
             data.targetY = data.y;
             data.interpolationTime = 0;
@@ -245,7 +373,6 @@ export class gameScene extends Scene {
                     game.flags[data.flag].y = data.y;
                 }
             }
-            console.log("flag moved", data);
         });
 
         client.on('flagReturned', (data) => {
@@ -319,6 +446,13 @@ export class gameScene extends Scene {
                 flag.interpolationTime = 0;
             });
             
+            // Preserve the current map
+            if (data.currentMap) {
+                game.currentMap = data.currentMap;
+            } else {
+                data.currentMap = game.currentMap;
+            }
+            
             game = data;
             initialized = true;
         });
@@ -326,16 +460,70 @@ export class gameScene extends Scene {
         client.on('connect', () => {
             getClient = true;
         });
+
+        client.on('mapChange', (data) => {
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
+            }
+            
+            if (data.currentMap) {
+                // Update the current map
+                game.currentMap = data.currentMap;
+                console.log(`Map changed to: ${data.currentMap}`);
+            }
+        });
+
+        client.on('timerUpdate', (timeString) => {
+            // Update the local timestamp display with the server's time
+            if (initialized) {
+                this.timestamp.setFromString(timeString);
+            }
+        });
+
+        client.on('gameOver', (data) => {
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
+            }
+            
+            // Handle game over state
+            commands.globals.reason = `Game Over! Winner: ${data.winner} (Team: ${data.teamwinner})`;
+            commands.switchScene(2); // Switch to the game over scene
+            client.disconnect();
+        });
     }
 
     async onLoad(commands) {
-        client = await io(`${lobbyPath}`,  { transports: ['websocket'], upgrade: false });
+        // Load maps first
+        if (!await loadMaps()) {
+            commands.globals.reason = "Failed to load maps. Please try again.";
+            commands.switchScene(2);
+            return;
+        }
         
-        await this.setupListeners();
+        this.mapsLoaded = true;
         
-        setTimeout(() => {
-            client.emit('name', naem);
-        }, 100);
+        // Parse default map
+        if (!parseMap("map1")) {
+            commands.globals.reason = "Failed to parse default map. Please try again.";
+            commands.switchScene(2);
+            return;
+        }
+        
+        this.loadedMap = "map1";
+        
+        // Connect to server
+        try {
+            client = await io(`${lobbyPath}`,  { transports: ['websocket'], upgrade: false });
+            
+            await this.setupListeners();
+            
+            setTimeout(() => {
+                client.emit('name', naem);
+            }, 100);
+        } catch (error) {
+            commands.globals.reason = "Failed to connect to server. Please try again.";
+            commands.switchScene(2);
+        }
     }
 
     async onExit(commands) {
@@ -350,31 +538,46 @@ export class gameScene extends Scene {
                 blue: { x: 899, y: 250, color: "blue", team: "blue", capturedBy: "" },
             },
             messages: [],
+            currentMap: "map1"
         };
-        client.disconnect();
+        if (client) {
+            client.disconnect();
+        }
     }
 
     update(deltaTime, commands) {
-        if (initialized) {
-            try {
+        if (initialized && this.mapsLoaded) {
+            // Check if map has changed
+            if (game.currentMap !== this.loadedMap) {
+                if (!parseMap(game.currentMap)) {
+                    // Fall back to the previous map if parsing fails
+                    parseMap(this.loadedMap);
+                } else {
+                    this.loadedMap = game.currentMap;
+                }
+            }
+            
             let moved = false;
             let newX = game.players[naem].x;
             let newY = game.players[naem].y;
 
             // UI
             this.messageField.update(commands, deltaTime);
-            if (this.messageField.isActive) {
-                console.log("message field active");
-            }
             this.submitButton.update(commands);
 
             if (this.submitButton.isClicked(commands) && this.messageField.getText() !== "") {
                 const message = this.messageField.getText();
                 if (message !== undefined) {
-                    client.emit('message', JSON.stringify(`${naem} said ${message}`)); 
+                    client.emit('message', JSON.stringify(`${naem} said ${message}`));
+                    
+                    // Also add local message immediately for responsive feedback
+                    playerMessages[naem] = {
+                        text: message,
+                        timestamp: performance.now()
+                    };
+                    
                     this.messageField.setValue("");
                 }
-                console.log("message sent", message);
             }
 
             // Handle dash cooldown
@@ -389,6 +592,9 @@ export class gameScene extends Scene {
                     dashActive = false; // End the dash
                 }
             }
+
+            // Update timestamp
+            this.timestamp.setSeconds(this.timestamp.seconds() - deltaTime);
 
             const speed = dashActive ? moveSpeed * dashMultiplier : moveSpeed;
 
@@ -416,9 +622,13 @@ export class gameScene extends Scene {
                 dashCooldownRemaining = dashCooldown;
             }
 
-            const objects = [field]; // Add other objects here if needed
             if (moved) {
-                if (canMove(newX, newY, objects, [middleCube])) {
+                // For consistency with previous behavior, we pass field as objectsinside
+                // and any objects that need special handling as objectsoutside
+                const insideObjects = [field]; // Must stay inside the field
+                const outsideObjects = mapObjects.filter(obj => obj.type === "rect" && obj.collide !== false);
+                
+                if (canMove(newX, newY, insideObjects, outsideObjects)) {
                     game.players[naem].x = newX;
                     game.players[naem].y = newY;
                     
@@ -470,28 +680,20 @@ export class gameScene extends Scene {
                     }
                 }
             });
-
-            // Create an array of objects sorted by zIndex
-            const renderObjects = [
-                { ...field, height: field.height - 5 }, // Adjusted height for z-index
-                { ...middleCube, height: middleCube.height - 5 }, // Adjusted height for z-index
-                ...Object.values(game.players).map(player => ({ ...player, zIndex: 2 })),
-                ...Object.values(game.flags).map(flag => ({ ...flag, zIndex: 3 })),
-            ];
-
-            renderObjects.sort((a, b) => a.zIndex - b.zIndex);
-
-                this.sortedObjects = renderObjects; // Store for use in draw or other methods
-            } catch (e) {
-                // exit the scene to the death scene, add reason to globals
-                commands.globals.reason = "Client side error, may be death, for nerds: " + e;
-                commands.switchScene(2);
-            }
+            
+            // Cleanup expired player messages
+            const currentTime = performance.now();
+            Object.keys(playerMessages).forEach(playerName => {
+                if (currentTime - playerMessages[playerName].timestamp > MESSAGE_DISPLAY_DURATION) {
+                    delete playerMessages[playerName];
+                }
+            });
         }
     }
 
     draw(ctx) {
-        if (!initialized) return;
+        if (!initialized || !this.mapsLoaded) return;
+        
         // Check if player exists and has required properties
         if (!game.players[naem] || 
             typeof game.players[naem].x === 'undefined' || 
@@ -502,17 +704,24 @@ export class gameScene extends Scene {
         // Set camera position
         ctx.setZoom(2.5);
         ctx.setCamera(game.players[naem].x - 255, game.players[naem].y - 155);
-        ctx.clearBackground('#918777');
+        
+        // Use the background color from the map if available
+        const bgColor = currentMapData && currentMapData.outbg ? currentMapData.outbg : '#918777';
+        ctx.clearBackground(bgColor);
 
         // Draw field if it exists
         if (field && field.width && field.height) {
-            ctx.drawRect(field.x, field.y, field.width, field.height, "#4f4d4a");
+            const fieldColor = currentMapData && currentMapData.bg ? currentMapData.bg : "#4f4d4a";
+            ctx.drawRect(field.x, field.y, field.width, field.height, fieldColor);
         }
 
-        // Draw middle cube if it exists
-        if (middleCube && middleCube.width && middleCube.height) {
-            ctx.drawRect(middleCube.x, middleCube.y, middleCube.width, middleCube.height, "#4f4d40");
-        }
+        // Draw all map objects
+        mapObjects.forEach(obj => {
+            if (obj.type === "rect") {
+                ctx.drawRect(obj.x, obj.y, obj.width, obj.height, obj.color);
+            }
+            // Add support for other object types as needed
+        });
 
         // Draw flags if they exist
         if (game.flags) {
@@ -555,6 +764,49 @@ export class gameScene extends Scene {
                             "white",
                             10
                         );
+                        
+                        // Draw player message if exists
+                        if (playerMessages[player.name]) {
+                            const messageBubbleWidth = Math.min(playerMessages[player.name].text.length * 8, 200);
+                            const messageBubbleHeight = 22;
+                            const nameY = player.y - 20;
+                            const bubbleY = nameY - messageBubbleHeight - 5; // Position 5px above name
+                            
+                            // Draw message bubble background
+                            ctx.drawRect(
+                                player.x + playerWidth/2 - messageBubbleWidth/2,
+                                bubbleY,
+                                messageBubbleWidth,
+                                messageBubbleHeight,
+                                "rgba(0, 0, 0, 0.7)"
+                            );
+                            
+                            // Draw connecting triangle
+                            const triangleSize = 6;
+                            const triangleX = player.x + playerWidth/2;
+                            const triangleY = bubbleY + messageBubbleHeight;
+                            
+                            // Use the new drawTriangle method instead of rawCtx
+                            ctx.drawTriangle(
+                                triangleX, triangleY + triangleSize, // Point at bottom
+                                triangleX - triangleSize, triangleY, // Left corner
+                                triangleX + triangleSize, triangleY, // Right corner
+                                "rgba(0, 0, 0, 0.7)"
+                            );
+                            
+                            // Draw message text
+                            ctx.setTextAlign("center");
+                            ctx.drawText(
+                                player.x + playerWidth/2,
+                                bubbleY + messageBubbleHeight/2 + 4, // Center text vertically
+                                playerMessages[player.name].text.length > 25 ? 
+                                    playerMessages[player.name].text.substring(0, 22) + "..." : 
+                                    playerMessages[player.name].text,
+                                "white",
+                                12
+                            );
+                            ctx.setTextAlign("left");
+                        }
                     }
                 }
             });
@@ -583,6 +835,37 @@ export class gameScene extends Scene {
             // UI
             this.messageField.draw(ctx, false, false);
             this.submitButton.draw(ctx, false, false);
+
+            // Draw Timer at the top center with black box
+            const timerBoxWidth = 100;
+            const timerBoxHeight = 50;
+            ctx.drawRect(
+                CANVAS_WIDTH / 2 - timerBoxWidth / 2,
+                10,
+                timerBoxWidth,
+                timerBoxHeight,
+                "black",
+                false,
+                false
+            );
+            ctx.setTextAlign("center");
+            ctx.drawText(
+                CANVAS_WIDTH / 2,
+                10 + timerBoxHeight / 2,
+                this.timestamp.string(),
+                "white",
+                20,
+                false,
+                false
+            )
+            ctx.setTextAlign("left");
+        }
+    }
+
+    // Add a method to request map change
+    requestMapChange(mapName) {
+        if (client && initialized) {
+            client.emit('changeMap', JSON.stringify({ mapName: mapName }));
         }
     }
 }

@@ -6,6 +6,7 @@ import cors from 'cors';
 import { profanity } from '@2toad/profanity';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'url';
+import { timeData } from './time.js';
 import { dirname } from 'path';
 import { json } from 'stream/consumers';
 // filepath: /home/james/Documents/capture-flag-io/node/src/index.js
@@ -124,6 +125,10 @@ app.get('/assets/coverart.png', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/assets/coverart.png'));
 })
 
+app.get('/assets/maps.json', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public/assets/maps.json'));
+});
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/index.html'));
 });
@@ -136,6 +141,10 @@ class GameServer {
         this.lobby = lobbynum
         this.blues = 0;
         this.count = 0; // Track the number of players in the lobby
+        this.maintenance = false;
+        this.timestamp = new timeData(5 * 60); // 5 minutes
+        this.timerInterval = null;
+        this.timerRunning = false;
         this.game = {
             players: {},
             flags: {
@@ -143,7 +152,75 @@ class GameServer {
                 blue: this.createFlag("blue"),
             },
             messages: [],
+            currentMap: "map1" // Default map
         };
+    }
+
+    startGameTimer() {
+        // Clear any existing timer
+        this.stopGameTimer();
+        
+        // Create a new timer that ticks every second
+        this.timerInterval = setInterval(() => {
+            // Only countdown if there are players
+            if (this.count > 0) {
+                // Decrement by 1 second
+                this.timestamp.setSeconds(this.timestamp.seconds() - 1);
+                
+                // Emit the updated time to all clients
+                this.io.emit('timerUpdate', this.timestamp.string());
+                
+                // Check for game end condition
+                if (this.timestamp.seconds() <= 0) {
+                    // Game over logic
+                    this.handleGameOver();
+                }
+            }
+        }, 1000); // Run every 1000ms (1 second)
+        
+        this.timerRunning = true;
+    }
+    
+    stopGameTimer() {
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
+        }
+        this.timerRunning = false;
+    }
+
+    handleGameOver() {
+        // Your game over logic here
+        this.stopGameTimer();
+        this.io.emit('gameOver', { winner: this.determineWinner(), teamwinner: this.determineTeamWinner() });
+        // Reset the game or handle end-of-game state
+        this.timestamp.setSeconds(5 * 60); // Reset timer
+    }
+
+    determineWinner() {
+        let winnername = "";
+        let winnerscore = 0;
+        Object.values(this.game.players).forEach((player) => {
+            if (player.score > winnerscore) {
+                winnerscore = player.score;
+                winnername = player.name;
+            }
+        });
+        return winnername;
+    }
+
+    determineTeamWinner() {
+        // get the score of a team
+        let redScore = 0;
+        let blueScore = 0;
+        for (const player in this.game.players) {
+            if (this.game.players[player].team === "red") {
+                redScore++;
+            } else {
+                blueScore++;
+            }
+        }
+        return redScore > blueScore ? "red" : "blue";
     }
 
     emitWithLogging(event, message, log = true) {
@@ -177,6 +254,15 @@ class GameServer {
         };
     }
 
+    changeMap(mapName) {
+        if (mapName && typeof mapName === 'string') {
+            this.game.currentMap = mapName;
+            // Notify all clients about the map change
+            this.io.emit('mapChange', JSON.stringify({ currentMap: mapName }));
+            console.log(`Map changed to: ${mapName}`);
+        }
+    }
+
     do() {
         this.io.on('connection', (socket) => {
             console.log(`A user connected to ${this.io.name}!`);
@@ -201,6 +287,12 @@ class GameServer {
                 }
                 const team = this.reds < this.blues ? "red" : "blue";
                 team === "red" ? this.reds++ : this.blues++;
+
+                // if the count was 0, start the game timer
+                if (this.count === 0) {
+                    this.timestamp.setSeconds(5 * 60); // Reset timer to full
+                    this.startGameTimer();
+                }
 
                 const player = this.createPlayer(name, socket.id, team);
                 this.game.players[name] = player;
@@ -231,6 +323,12 @@ class GameServer {
                         flag.x = player.x;
                         flag.y = player.y;
                         this.emitWithLogging('flagDropped', JSON.stringify({ player: player.name, flag: player.team === "red" ? "blue" : "red" }));
+                    }
+
+                    // If no players left, reset the timer and stop it
+                    if (this.count === 0) {
+                        this.timestamp.setSeconds(5 * 60);
+                        this.stopGameTimer();
                     }
                 }
             });
@@ -320,6 +418,21 @@ class GameServer {
                     delete this.game.players[playerName];
                     this.count--; // Decrement player count
                     this.emitWithLogging('kill', JSON.stringify({ player: playerName, killer: "system" }));
+                    
+                    // If no players left, reset the timer and stop it
+                    if (this.count === 0) {
+                        this.timestamp.setSeconds(5 * 60);
+                        this.stopGameTimer();
+                    }
+                }
+            });
+
+            // Add a map change handler
+            socket.on('changeMap', (data) => {
+                if (typeof data === 'string') data = JSON.parse(data);
+                
+                if (data.mapName) {
+                    this.changeMap(data.mapName);
                 }
             });
         });
@@ -338,9 +451,9 @@ lobbies.forEach((lobby) => {
     lobby.server.do();
 });
 
-// function to get which lobby to go to
+// REST APIs
 app.get('/lobby', (req, res) => {
-    const availableLobby = lobbies.find(lobby => lobby.server.count < 10);
+    const availableLobby = lobbies.find(lobby => lobby.server.count < 10 && !lobby.server.maintenance);
     if (availableLobby) {
         return res.json({ path: availableLobby.path });
     } else {
