@@ -10,6 +10,9 @@ let initialized = false;
 let client;
 let intermission = false;
 let winners = {"player": "", "team": ""};
+let mapSelection = [];
+let votedFor = "";
+let mapVotes = {};
 const playerWidth = 25;
 const playerHeight = 25;
 const flagWidth = 25;
@@ -305,6 +308,7 @@ export class gameScene extends Scene {
 
         client.on('message', (data) => {
             const message = data;
+            if (typeof message !== 'string') return;
             game.messages.push(message);
             if (game.messages.length > readableMessages) {
                 game.messages.shift(); // Remove the oldest message
@@ -505,6 +509,32 @@ export class gameScene extends Scene {
             getClient = true;
         });
 
+        client.on('playerVotedFor', (data) => {
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
+            }
+            if (data.player === naem) {
+                votedFor = data.map;
+            } else {
+                // Remove player from any existing votes
+                for (const map in mapVotes) {
+                    if (mapVotes[map]) {
+                        mapVotes[map] = mapVotes[map].filter(player => player !== data.player);
+                    }
+                }
+                
+                // Initialize the map's vote array if it doesn't exist
+                if (!mapVotes[data.map]) {
+                    mapVotes[data.map] = [];
+                }
+                
+                // Add the player to the voted map
+                if (!mapVotes[data.map].includes(data.player)) {
+                    mapVotes[data.map].push(data.player);
+                }
+            }
+        });
+
         client.on('mapChange', (data) => {
             if (typeof data === 'string') {
                 data = JSON.parse(data);
@@ -514,6 +544,8 @@ export class gameScene extends Scene {
                 // Update the current map
                 game.currentMap = data.currentMap;
                 console.log(`Map changed to: ${data.currentMap}`);
+                mapSelection = [];
+                mapVotes = {};
             }
         });
 
@@ -532,8 +564,24 @@ export class gameScene extends Scene {
             winners.team = data.teamwinner;
             intermission = true;
 
-            // So if we are winner, we choose the next map.
-            // If we are not winner, we wait for the next game.
+            // Handle map selection
+            const maps = data.maps;
+            if (!Array.isArray(maps) || maps.length === 0) return;
+            
+            // Filter out the current map if it's in the array
+            const filteredMaps = maps.filter(map => map !== game.currentMap);
+            
+            // Only set if we have at least one map
+            if (filteredMaps.length > 0) {
+                mapSelection = filteredMaps;
+                
+                // Initialize vote arrays for each map
+                mapSelection.forEach(map => {
+                    if (!mapVotes[map]) {
+                        mapVotes[map] = [];
+                    }
+                });
+            }
         });
     }
 
@@ -578,15 +626,12 @@ export class gameScene extends Scene {
         dead = false;
         game = {
             players: {},
-            flags: {
-                red: { x: 100, y: 250, color: "red", team: "red", capturedBy: "" },
-                blue: { x: 899, y: 250, color: "blue", team: "blue", capturedBy: "" },
-            },
+            flags: {},
             messages: [],
             currentMap: "map1"
         };
         if (client) {
-        client.disconnect();
+            client.disconnect();
         }
     }
 
@@ -615,6 +660,20 @@ export class gameScene extends Scene {
                 this.mapButtonTwo.update(commands);
                 this.mapButtonThree.update(commands);
 
+                const mapButtonClicked = {one: this.mapButtonOne.isClicked(commands), two: this.mapButtonTwo.isClicked(commands), three: this.mapButtonThree.isClicked(commands)};
+                switch (true) {
+                    case mapButtonClicked.one && mapSelection.length > 0:
+                        votedFor = mapSelection[0];
+                        break;
+                    case mapButtonClicked.two && mapSelection.length > 1:
+                        votedFor = mapSelection[1];
+                        break;
+                    case mapButtonClicked.three && mapSelection.length > 2:
+                        votedFor = mapSelection[2];
+                        break;
+                    default:
+                        break;
+                }
                 if (this.submitButton.isClicked(commands) && this.messageField.getText() !== "") {
                     const message = this.messageField.getText();
                     if (message !== undefined) {
@@ -678,7 +737,7 @@ export class gameScene extends Scene {
                         game.players[naem].y = newY;
                         
                         // Only send movement updates at the specified rate
-                        const now = performance.now();
+                        const now = deltaTime; // deltaTime is performance.now()
                         if (now - lastMovementUpdate > movementUpdateRate) {
                         client.emit('move', JSON.stringify({ name: naem, x: newX, y: newY }));
                             lastMovementUpdate = now;
@@ -998,6 +1057,50 @@ export class gameScene extends Scene {
                     false
                 )
                 ctx.setTextAlign("left");
+                if (winners.team === game.players[naem].team) {
+                    // Draw some selections
+                    ctx.drawText(CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.5, "Select a map", "white", 20, false, false);
+                    
+                    // Only draw buttons for available maps
+                    if (mapSelection.length > 0) {
+                        this.mapButtonOne.label = mapSelection[0] || "Map 1";
+                        this.mapButtonOne.draw(ctx, false, false);
+                    }
+                    
+                    if (mapSelection.length > 1) {
+                        this.mapButtonTwo.label = mapSelection[1] || "Map 2";
+                        this.mapButtonTwo.draw(ctx, false, false);
+                    }
+                    
+                    if (mapSelection.length > 2) {
+                        this.mapButtonThree.label = mapSelection[2] || "Map 3";
+                        this.mapButtonThree.draw(ctx, false, false);
+                    }
+                    
+                    // Below the buttons, draw how much each map has been voted for
+                    let voteYPosition = CANVAS_HEIGHT * 0.5 + 50;
+                    
+                    // Only display vote counts for maps that exist
+                    if (mapSelection.length > 0) {
+                        const voteCount = mapVotes[mapSelection[0]] ? mapVotes[mapSelection[0]].length : 0;
+                        ctx.drawText(CANVAS_WIDTH / 2, voteYPosition, `${mapSelection[0]}: ${voteCount} votes`, "white", 20, false, false);
+                        voteYPosition += 20;
+                    }
+                    
+                    if (mapSelection.length > 1) {
+                        const voteCount = mapVotes[mapSelection[1]] ? mapVotes[mapSelection[1]].length : 0;
+                        ctx.drawText(CANVAS_WIDTH / 2, voteYPosition, `${mapSelection[1]}: ${voteCount} votes`, "white", 20, false, false);
+                        voteYPosition += 20;
+                    }
+                    
+                    if (mapSelection.length > 2) {
+                        const voteCount = mapVotes[mapSelection[2]] ? mapVotes[mapSelection[2]].length : 0;
+                        ctx.drawText(CANVAS_WIDTH / 2, voteYPosition, `${mapSelection[2]}: ${voteCount} votes`, "white", 20, false, false);
+                    }
+                } else {
+                    // Draw a button to wait for the next game
+                    ctx.drawText(CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.5, "Waiting for next game...", "white", 20, false, false);
+                }
             }
         }
     }

@@ -57,6 +57,10 @@ export class otherCtx {
         this.ctx.fillText(text, 0, 0);
         this.ctx.restore();
     }
+    drawTextWithBackground(x, y, text, color, bgcolor, fontSize, cameraPos = true, cameraZoom = true, padding = 5) {
+        this.drawRect(x, y, this.ctx.measureText(text).width + padding * 2, fontSize + padding * 2, bgcolor, cameraPos, cameraZoom);
+        this.drawText(x + padding, y + padding, text, color, fontSize, cameraPos, cameraZoom);
+    }
     drawImage(image, x, y, width, height, cameraPos = true, cameraZoom = true) {
         const posX = cameraPos ? (x - this.cameraX) * (cameraZoom ? this.zoom : 1) : x;
         const posY = cameraPos ? (y - this.cameraY) * (cameraZoom ? this.zoom : 1) : y;

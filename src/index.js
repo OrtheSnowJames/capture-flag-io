@@ -7,7 +7,7 @@ import fs from 'fs';
 import { profanity } from '@2toad/profanity';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'url';
-import { timeData } from './time.js';
+import { timeData, getRandomKeys } from './misc.js';
 import { dirname } from 'path';
 import { json } from 'stream/consumers';
 // filepath: /home/james/Documents/capture-flag-io/node/src/index.js
@@ -181,7 +181,10 @@ class GameServer {
         this.maintenance = true; // So no players can join during map choosing
         // Your game over logic here
         this.stopGameTimer();
-        this.io.emit('gameOver', { winner: this.determineWinner(), teamwinner: this.determineTeamWinner() });
+        // Get 3 random maps from maps.json
+        const maps = JSON.parse(fs.readFileSync(path.join(__dirname, 'public/assets/maps.json')));
+        const randomMaps = getRandomKeys(maps, 3);
+        this.io.emit('gameOver', { winner: this.determineWinner(), teamwinner: this.determineTeamWinner(), maps: randomMaps });
         // Reset the game or handle end-of-game state
         this.timestamp.setSeconds(5 * 60); // Reset timer
     }

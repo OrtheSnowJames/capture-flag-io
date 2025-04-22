@@ -70,3 +70,16 @@ export class timeData {
       return timeString;
     }
   }
+
+export function getRandomKeys(obj, numKeys = 3) {
+  const keys = Object.keys(obj);
+  const numKeysToGet = Math.min(numKeys, keys.length);
+  const randomKeys = [];
+
+  for (let i = 0; i < numKeysToGet; i++) {
+    const randomIndex = Math.floor(Math.random() * keys.length);
+    randomKeys.push(keys.splice(randomIndex, 1)[0]);
+  }
+
+  return randomKeys;
+}
