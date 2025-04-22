@@ -3,6 +3,7 @@ import express from 'express';
 import http from 'http';
 import path from 'path';
 import cors from 'cors';
+import fs from 'fs';
 import { profanity } from '@2toad/profanity';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'url';
@@ -92,6 +93,9 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Origin', 'X-Requested-With', 'Accept'],
 }));
 
+// Middleware to serve static files from the assets directory
+app.use('/assets', express.static(path.join(__dirname, 'public/assets')));
+
 // Routes
 app.get('/script.js', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/script/script.js'));
@@ -111,22 +115,6 @@ app.get('/script/game', (req, res) => {
 
 app.get('/shell.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/shell.html'));
-});
-
-app.get('/assets/redflag.png', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public/assets/redflag.png'));
-})
-
-app.get('/assets/blueflag.png', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public/assets/blueflag.png'));
-});
-
-app.get('/assets/coverart.png', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public/assets/coverart.png'));
-})
-
-app.get('/assets/maps.json', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public/assets/maps.json'));
 });
 
 app.get('/', (req, res) => {
@@ -190,6 +178,7 @@ class GameServer {
     }
 
     handleGameOver() {
+        this.maintenance = true; // So no players can join during map choosing
         // Your game over logic here
         this.stopGameTimer();
         this.io.emit('gameOver', { winner: this.determineWinner(), teamwinner: this.determineTeamWinner() });
@@ -310,6 +299,13 @@ class GameServer {
                 if (typeof data === 'string') data = JSON.parse(data);
                 const player = data?.name ? this.game.players[data.name] : undefined;
                 if (player && data.killer) {
+                    // Update killer's score if the killer is a player (not system)
+                    const killer = Object.values(this.game.players).find(p => p.name === data.killer);
+                    if (killer && data.killer !== "system") {
+                        killer.score += (player.score !== 0 ? player.score : 1);
+                        this.emitWithLogging('scoreUp', JSON.stringify({ player: killer.name, score: killer.score }));
+                    }
+                    
                     if (player.team === "red") {
                         this.reds--;
                     } else {
@@ -355,6 +351,10 @@ class GameServer {
                     for (const name in this.game.players) {
                         const otherPlayer = this.game.players[name];
                         if (otherPlayer.id !== player.id && Math.abs(player.x - otherPlayer.x) < 20 && Math.abs(player.y - otherPlayer.y) < 20) {
+                            // Update the killer's score based on the killed player's score
+                            player.score += (otherPlayer.score !== 0 ? otherPlayer.score : 1);
+                            this.emitWithLogging('scoreUp', JSON.stringify({ player: player.name, score: player.score }));
+                            
                             delete this.game.players[name];
                             if (otherPlayer.team === "red") {
                                 this.reds--;

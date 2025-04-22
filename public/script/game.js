@@ -8,6 +8,8 @@ const PORT = 4566;
 let initialized = false;
 
 let client;
+let intermission = false;
+let winners = {"player": "", "team": ""};
 const playerWidth = 25;
 const playerHeight = 25;
 const flagWidth = 25;
@@ -76,9 +78,39 @@ function parseMap(mapName) {
     const map = maps[mapName];
     currentMapData = map;
     
-    // Set backgrounds
-    field.bg = map.bg || "#4f4d4a";
-    field.outbg = map.outbg || "#918777";
+    // Helper function to check if a string is an image path
+    const isImagePath = (path) => {
+        if (!path || typeof path !== 'string') return false;
+        return path.match(/\.(jpeg|jpg|gif|png|webp)$/i) !== null || path.startsWith('img(');
+    };
+    
+    // Extract image path from different formats
+    const getImagePath = (path) => {
+        if (!path || typeof path !== 'string') return '';
+        if (path.startsWith('img(')) {
+            return path.slice(4, -1); // Extract from img('path')
+        }
+        return path; // Return direct path
+    };
+    
+    // Set backgrounds - check for image paths
+    if (isImagePath(map.bg)) {
+        field.bg = new Image();
+        field.bg.src = getImagePath(map.bg);
+        field.bgIsImage = true;
+    } else {
+        field.bg = map.bg || "#4f4d4a";
+        field.bgIsImage = false;
+    }
+    
+    if (isImagePath(map.outbg)) {
+        field.outbg = new Image();
+        field.outbg.src = getImagePath(map.outbg);
+        field.outbgIsImage = true;
+    } else {
+        field.outbg = map.outbg || "#918777";
+        field.outbgIsImage = false;
+    }
     
     // Clear existing map objects
     mapObjects = [];
@@ -86,23 +118,14 @@ function parseMap(mapName) {
     // Parse and create map objects
     if (map.objects && Array.isArray(map.objects)) {
         map.objects.forEach(obj => {
-            // Evaluate expressions for coordinates and dimensions
-            // This allows values like "canvasWidth / 2" in the JSON
             try {
-                // Create a function to safely evaluate expressions with our variables
                 const evalInContext = (expr, context) => {
-                    // Create parameter names and values arrays
                     const paramNames = Object.keys(context);
                     const paramValues = Object.values(context);
-                    
-                    // Create a new function with those parameters that returns the evaluated expression
                     const evaluator = new Function(...paramNames, `return ${expr};`);
-                    
-                    // Call the function with our context values
                     return evaluator(...paramValues);
                 };
                 
-                // Context containing our variables
                 const evalContext = {
                     canvasWidth: fieldWidth,
                     canvasHeight: fieldHeight,
@@ -110,7 +133,6 @@ function parseMap(mapName) {
                     playerHeight: playerHeight
                 };
                 
-                // Evaluate each property if it's a string expression
                 const x = typeof obj.x === 'string' ? 
                     evalInContext(obj.x, evalContext) : obj.x;
                 const y = typeof obj.y === 'string' ? 
@@ -120,14 +142,24 @@ function parseMap(mapName) {
                 const height = typeof obj.height === 'string' ? 
                     evalInContext(obj.height, evalContext) : obj.height;
                 
+                let color = obj.color;
+                let isImageColor = false;
+                
+                if (isImagePath(obj.color)) {
+                    color = new Image();
+                    color.src = getImagePath(obj.color);
+                    isImageColor = true;
+                }
+                
                 mapObjects.push({
                     type: obj.type,
                     x: x,
                     y: y,
                     width: width,
                     height: height,
-                    color: obj.color,
-                    collide: obj.collide !== false // Objects are collidable by default
+                    color: color,
+                    isImageColor: isImageColor,
+                    collide: obj.collide !== false
                 });
             } catch (e) {
                 console.error("Error parsing map object:", e, obj);
@@ -220,6 +252,10 @@ let sendName = false;
 export class gameScene extends Scene {
     messageField = new OCtxTextField(0, readableMessages * 30, 500, 60, 500/20);
     submitButton = new OCtxButton(520, readableMessages * 30, 100, 60, "Send");
+
+    mapButtonOne = new OCtxButton(CANVAS_WIDTH * 0.25 - 125, CANVAS_HEIGHT * 0.4, 250, 60, "This");
+    mapButtonTwo = new OCtxButton(CANVAS_WIDTH * 0.5 - 125, CANVAS_HEIGHT * 0.4, 250, 60, "This");
+    mapButtonThree = new OCtxButton(CANVAS_WIDTH * 0.75 - 125, CANVAS_HEIGHT * 0.4, 250, 60, "Or This");
     
     constructor() {
         super();
@@ -227,6 +263,9 @@ export class gameScene extends Scene {
         this.interpolationTime = 0;
         this.mapsLoaded = false;
         this.loadedMap = null;
+        this.mapButtonOne.deactivate();
+        this.mapButtonTwo.deactivate();
+        this.mapButtonThree.deactivate();
         this.timestamp = new timeData(5 * 60); // 5 minutes
     }
 
@@ -324,8 +363,6 @@ export class gameScene extends Scene {
                 delete game.players[data.player];
             }
 
-            if (game.players[data.killer] && data.killer !== "system")   game.players[data.killer].score++;
-
             if (game.players[data.player]?.name === naem) {
                 // we need to leave this scene
                 initialized = false;
@@ -417,9 +454,16 @@ export class gameScene extends Scene {
                 data = JSON.parse(data);
             }
             if (data.player in game.players) {
-                game.players[data.player].score++;
+                // Update the player's score with the value sent from the server
+                // If score is provided, use it, otherwise just increment
+                if (data.score !== undefined) {
+                    game.players[data.player].score = data.score;
+                } else {
+                    // Fallback in case the score value isn't provided
+                    game.players[data.player].score = (game.players[data.player].score || 0) + 1;
+                }
             }
-        })
+        });
 
         client.on('gameState', (data) => {
             if (typeof data === 'string') {
@@ -484,11 +528,12 @@ export class gameScene extends Scene {
             if (typeof data === 'string') {
                 data = JSON.parse(data);
             }
-            
-            // Handle game over state
-            commands.globals.reason = `Game Over! Winner: ${data.winner} (Team: ${data.teamwinner})`;
-            commands.switchScene(2); // Switch to the game over scene
-            client.disconnect();
+            winners.player = data.winner;
+            winners.team = data.teamwinner;
+            intermission = true;
+
+            // So if we are winner, we choose the next map.
+            // If we are not winner, we wait for the next game.
         });
     }
 
@@ -514,12 +559,12 @@ export class gameScene extends Scene {
         // Connect to server
         try {
             client = await io(`${lobbyPath}`,  { transports: ['websocket'], upgrade: false });
-            
-            await this.setupListeners();
-            
-            setTimeout(() => {
-                client.emit('name', naem);
-            }, 100);
+        
+        await this.setupListeners();
+        
+        setTimeout(() => {
+            client.emit('name', naem);
+        }, 100);
         } catch (error) {
             commands.globals.reason = "Failed to connect to server. Please try again.";
             commands.switchScene(2);
@@ -541,153 +586,159 @@ export class gameScene extends Scene {
             currentMap: "map1"
         };
         if (client) {
-            client.disconnect();
+        client.disconnect();
         }
     }
 
     update(deltaTime, commands) {
-        if (initialized && this.mapsLoaded) {
-            // Check if map has changed
-            if (game.currentMap !== this.loadedMap) {
-                if (!parseMap(game.currentMap)) {
-                    // Fall back to the previous map if parsing fails
-                    parseMap(this.loadedMap);
-                } else {
-                    this.loadedMap = game.currentMap;
+        try {
+            if (initialized && this.mapsLoaded) {
+                // Check if map has changed
+                if (game.currentMap !== this.loadedMap) {
+                    if (!parseMap(game.currentMap)) {
+                        // Fall back to the previous map if parsing fails
+                        parseMap(this.loadedMap);
+                    } else {
+                        this.loadedMap = game.currentMap;
+                    }
                 }
-            }
-            
-            let moved = false;
-            let newX = game.players[naem].x;
-            let newY = game.players[naem].y;
-
-            // UI
-            this.messageField.update(commands, deltaTime);
-            this.submitButton.update(commands);
-
-            if (this.submitButton.isClicked(commands) && this.messageField.getText() !== "") {
-                const message = this.messageField.getText();
-                if (message !== undefined) {
-                    client.emit('message', JSON.stringify(`${naem} said ${message}`));
-                    
-                    // Also add local message immediately for responsive feedback
-                    playerMessages[naem] = {
-                        text: message,
-                        timestamp: performance.now()
-                    };
-                    
-                    this.messageField.setValue("");
-                }
-            }
-
-            // Handle dash cooldown
-            if (dashCooldownRemaining > 0) {
-                dashCooldownRemaining -= deltaTime;
-            }
-
-            // Handle active dash
-            if (dashActive) {
-                dashTimeRemaining -= deltaTime;
-                if (dashTimeRemaining <= 0) {
-                    dashActive = false; // End the dash
-                }
-            }
-
-            // Update timestamp
-            this.timestamp.setSeconds(this.timestamp.seconds() - deltaTime);
-
-            const speed = dashActive ? moveSpeed * dashMultiplier : moveSpeed;
-
-            if (commands.keys['ArrowUp'] || commands.keys['w']) {
-                newY -= speed * deltaTime;
-                moved = true;
-            }
-            if (commands.keys['ArrowLeft'] || commands.keys['a']) {
-                newX -= speed * deltaTime;
-                moved = true;
-            }
-            if (commands.keys['ArrowDown'] || commands.keys['s']) {
-                newY += speed * deltaTime;
-                moved = true;
-            }
-            if (commands.keys['ArrowRight'] || commands.keys['d']) {
-                newX += speed * deltaTime;
-                moved = true;
-            }
-
-            // Trigger dash on spacebar press
-            if (commands.keys[' '] && dashCooldownRemaining <= 0 && !dashActive) {
-                dashActive = true;
-                dashTimeRemaining = dashDuration;
-                dashCooldownRemaining = dashCooldown;
-            }
-
-            if (moved) {
-                // For consistency with previous behavior, we pass field as objectsinside
-                // and any objects that need special handling as objectsoutside
-                const insideObjects = [field]; // Must stay inside the field
-                const outsideObjects = mapObjects.filter(obj => obj.type === "rect" && obj.collide !== false);
                 
-                if (canMove(newX, newY, insideObjects, outsideObjects)) {
-                    game.players[naem].x = newX;
-                    game.players[naem].y = newY;
+                let moved = false;
+                let newX = game.players[naem].x;
+                let newY = game.players[naem].y;
+
+                // UI
+                this.messageField.update(commands, deltaTime);
+                this.submitButton.update(commands);
+
+                this.mapButtonOne.update(commands);
+                this.mapButtonTwo.update(commands);
+                this.mapButtonThree.update(commands);
+
+                if (this.submitButton.isClicked(commands) && this.messageField.getText() !== "") {
+                    const message = this.messageField.getText();
+                    if (message !== undefined) {
+                        client.emit('message', JSON.stringify(`${naem} said ${message}`)); 
+                        
+                        // Remove the local message preview - let the server send it back properly censored
+                        this.messageField.setValue("");
+                    }
+                }
+
+                // Handle dash cooldown
+                if (dashCooldownRemaining > 0) {
+                    dashCooldownRemaining -= deltaTime;
+                }
+
+                // Handle active dash
+                if (dashActive) {
+                    dashTimeRemaining -= deltaTime;
+                    if (dashTimeRemaining <= 0) {
+                        dashActive = false; // End the dash
+                    }
+                }
+
+                // Update timestamp
+                this.timestamp.setSeconds(this.timestamp.seconds() - deltaTime);
+
+                const speed = dashActive ? moveSpeed * dashMultiplier : moveSpeed;
+
+                if (commands.keys['ArrowUp'] || commands.keys['w']) {
+                    newY -= speed * deltaTime;
+                    moved = true;
+                }
+                if (commands.keys['ArrowLeft'] || commands.keys['a']) {
+                    newX -= speed * deltaTime;
+                    moved = true;
+                }
+                if (commands.keys['ArrowDown'] || commands.keys['s']) {
+                    newY += speed * deltaTime;
+                    moved = true;
+                }
+                if (commands.keys['ArrowRight'] || commands.keys['d']) {
+                    newX += speed * deltaTime;
+                    moved = true;
+                }
+
+                // Trigger dash on spacebar press
+                if (commands.keys[' '] && dashCooldownRemaining <= 0 && !dashActive) {
+                    dashActive = true;
+                    dashTimeRemaining = dashDuration;
+                    dashCooldownRemaining = dashCooldown;
+                }
+
+                if (moved) {
+                    // For consistency with previous behavior, we pass field as objectsinside
+                    // and any objects that need special handling as objectsoutside
+                    const insideObjects = [field]; // Must stay inside the field
+                    const outsideObjects = mapObjects.filter(obj => obj.type === "rect" && obj.collide !== false);
                     
-                    // Only send movement updates at the specified rate
-                    const now = performance.now();
-                    if (now - lastMovementUpdate > movementUpdateRate) {
+                    if (canMove(newX, newY, insideObjects, outsideObjects) && !intermission) {
+                        game.players[naem].x = newX;
+                        game.players[naem].y = newY;
+                        
+                        // Only send movement updates at the specified rate
+                        const now = performance.now();
+                        if (now - lastMovementUpdate > movementUpdateRate) {
                         client.emit('move', JSON.stringify({ name: naem, x: newX, y: newY }));
-                        lastMovementUpdate = now;
+                            lastMovementUpdate = now;
+                        }
                     }
                 }
-            }
 
-            // Update interpolation for other players
-            Object.keys(game.players).forEach(playerName => {
-                if (playerName !== naem) {
-                    const player = game.players[playerName];
-                    // Increase interpolation time
-                    player.interpolationTime += deltaTime * 5; // Adjust speed factor as needed
-                    
-                    // Clamp interpolation time to [0, 1]
-                    if (player.interpolationTime > 1) player.interpolationTime = 1;
-                    
-                    // Interpolate position
-                    player.x = lerp(player.prevX, player.targetX, player.interpolationTime);
-                    player.y = lerp(player.prevY, player.targetY, player.interpolationTime);
-                }
-            });
-
-            // Update interpolation for flags
-            Object.keys(game.flags).forEach(flagName => {
-                const flag = game.flags[flagName];
-                if (flag.interpolationTime !== undefined) {
-                    // Increase interpolation time
-                    flag.interpolationTime += deltaTime * 5; // Adjust speed factor as needed
-                    
-                    // Clamp interpolation time to [0, 1]
-                    if (flag.interpolationTime > 1) flag.interpolationTime = 1;
-                    
-                    // Don't interpolate if flag is being carried
-                    if (!flag.capturedBy) {
+                // Update interpolation for other players
+                Object.keys(game.players).forEach(playerName => {
+                    if (playerName !== naem) {
+                        const player = game.players[playerName];
+                        // Increase interpolation time
+                        player.interpolationTime += deltaTime * 5; // Adjust speed factor as needed
+                        
+                        // Clamp interpolation time to [0, 1]
+                        if (player.interpolationTime > 1) player.interpolationTime = 1;
+                        
                         // Interpolate position
-                        flag.x = lerp(flag.prevX, flag.targetX, flag.interpolationTime);
-                        flag.y = lerp(flag.prevY, flag.targetY, flag.interpolationTime);
-                    } else if (game.players[flag.capturedBy]) {
-                        // If flag is captured, make it follow the player directly
-                        const player = game.players[flag.capturedBy];
-                        flag.x = player.x;
-                        flag.y = player.y - flagHeight / 2;
+                        player.x = lerp(player.prevX, player.targetX, player.interpolationTime);
+                        player.y = lerp(player.prevY, player.targetY, player.interpolationTime);
                     }
-                }
-            });
-            
-            // Cleanup expired player messages
-            const currentTime = performance.now();
-            Object.keys(playerMessages).forEach(playerName => {
-                if (currentTime - playerMessages[playerName].timestamp > MESSAGE_DISPLAY_DURATION) {
-                    delete playerMessages[playerName];
-                }
-            });
+                });
+
+                // Update interpolation for flags
+                Object.keys(game.flags).forEach(flagName => {
+                    const flag = game.flags[flagName];
+                    if (flag.interpolationTime !== undefined) {
+                        // Increase interpolation time
+                        flag.interpolationTime += deltaTime * 5; // Adjust speed factor as needed
+                        
+                        // Clamp interpolation time to [0, 1]
+                        if (flag.interpolationTime > 1) flag.interpolationTime = 1;
+                        
+                        // Don't interpolate if flag is being carried
+                        if (!flag.capturedBy) {
+                            // Interpolate position
+                            flag.x = lerp(flag.prevX, flag.targetX, flag.interpolationTime);
+                            flag.y = lerp(flag.prevY, flag.targetY, flag.interpolationTime);
+                        } else if (game.players[flag.capturedBy]) {
+                            // If flag is captured, make it follow the player directly
+                            const player = game.players[flag.capturedBy];
+                            flag.x = player.x;
+                            flag.y = player.y - flagHeight / 2;
+                        }
+                    }
+                });
+                
+                // Cleanup expired player messages
+                const currentTime = performance.now();
+                Object.keys(playerMessages).forEach(playerName => {
+                    if (currentTime - playerMessages[playerName].timestamp > MESSAGE_DISPLAY_DURATION) {
+                        delete playerMessages[playerName];
+                    }
+                });
+            }
+        } catch (e) {
+            // Switch to dead scene and give reasoning
+            commands.globals.reason = "Client side error, may be death, for nerds: Failed to update game state: " + e.message;
+            commands.switchScene(2);
+            return;
         }
     }
 
@@ -705,20 +756,73 @@ export class gameScene extends Scene {
         ctx.setZoom(2.5);
         ctx.setCamera(game.players[naem].x - 255, game.players[naem].y - 155);
         
-        // Use the background color from the map if available
-        const bgColor = currentMapData && currentMapData.outbg ? currentMapData.outbg : '#918777';
-        ctx.clearBackground(bgColor);
+        // Handle outer background (outbg)
+        if (field.outbgIsImage && field.outbg instanceof Image && field.outbg.complete) {
+            // Draw the outer background with image pattern
+            ctx.rawCtx().fillStyle = '#000000'; // Fallback color
+            ctx.rawCtx().fillRect(0, 0, ctx.rawCtx().canvas.width, ctx.rawCtx().canvas.height);
+            
+            try {
+                // Create pattern and fill background
+                const pattern = ctx.rawCtx().createPattern(field.outbg, 'repeat');
+                if (pattern) {
+                    ctx.rawCtx().fillStyle = pattern;
+                    ctx.rawCtx().fillRect(0, 0, ctx.rawCtx().canvas.width, ctx.rawCtx().canvas.height);
+                }
+            } catch (e) {
+                console.error("Error creating pattern for outbg:", e);
+                ctx.clearBackground('#918777'); // Use default if pattern creation fails
+            }
+        } else {
+            // Use the background color for outbg
+            const bgOutColor = field.outbg || '#918777';
+            ctx.clearBackground(bgOutColor);
+        }
 
         // Draw field if it exists
         if (field && field.width && field.height) {
-            const fieldColor = currentMapData && currentMapData.bg ? currentMapData.bg : "#4f4d4a";
-            ctx.drawRect(field.x, field.y, field.width, field.height, fieldColor);
+            if (field.bgIsImage && field.bg instanceof Image && field.bg.complete) {
+                // Draw field with background image
+                ctx.drawRect(field.x, field.y, field.width, field.height, "#4f4d4a"); // Fallback color
+                try {
+                    ctx.rawCtx().drawImage(
+                        field.bg, 
+                        field.x - ctx.cameraX * ctx.zoom, 
+                        field.y - ctx.cameraY * ctx.zoom, 
+                        field.width * ctx.zoom, 
+                        field.height * ctx.zoom
+                    );
+                } catch (e) {
+                    console.error("Error drawing bg image:", e);
+                }
+            } else {
+                // Use solid color for field background
+                const fieldBg = field.bg || "#4f4d4a";
+                ctx.drawRect(field.x, field.y, field.width, field.height, fieldBg);
+            }
         }
 
         // Draw all map objects
         mapObjects.forEach(obj => {
             if (obj.type === "rect") {
-                ctx.drawRect(obj.x, obj.y, obj.width, obj.height, obj.color);
+                if (obj.isImageColor && obj.color instanceof Image && obj.color.complete) {
+                    // Draw rectangle with image fill
+                    ctx.drawRect(obj.x, obj.y, obj.width, obj.height, "#4f4d40"); // Fallback color
+                    try {
+                        ctx.rawCtx().drawImage(
+                            obj.color,
+                            obj.x - ctx.cameraX * ctx.zoom,
+                            obj.y - ctx.cameraY * ctx.zoom,
+                            obj.width * ctx.zoom,
+                            obj.height * ctx.zoom
+                        );
+                    } catch (e) {
+                        console.error("Error drawing object image:", e);
+                    }
+                } else {
+                    // Use solid color for object
+                    ctx.drawRect(obj.x, obj.y, obj.width, obj.height, obj.color);
+                }
             }
             // Add support for other object types as needed
         });
@@ -837,28 +941,64 @@ export class gameScene extends Scene {
             this.submitButton.draw(ctx, false, false);
 
             // Draw Timer at the top center with black box
-            const timerBoxWidth = 100;
-            const timerBoxHeight = 50;
-            ctx.drawRect(
-                CANVAS_WIDTH / 2 - timerBoxWidth / 2,
-                10,
-                timerBoxWidth,
-                timerBoxHeight,
-                "black",
-                false,
-                false
-            );
-            ctx.setTextAlign("center");
-            ctx.drawText(
-                CANVAS_WIDTH / 2,
-                10 + timerBoxHeight / 2,
-                this.timestamp.string(),
-                "white",
-                20,
-                false,
-                false
-            )
-            ctx.setTextAlign("left");
+            if (!intermission) {
+                const timerBoxWidth = 100;
+                const timerBoxHeight = 50;
+                ctx.drawRect(
+                    CANVAS_WIDTH / 2 - timerBoxWidth / 2,
+                    10,
+                    timerBoxWidth,
+                    timerBoxHeight,
+                    "black",
+                    false,
+                    false
+                );
+                ctx.setTextAlign("center");
+                ctx.drawText(
+                    CANVAS_WIDTH / 2,
+                    10 + timerBoxHeight / 2,
+                    this.timestamp.string(),
+                    "white",
+                    20,
+                    false,
+                    false
+                )
+                ctx.setTextAlign("left");
+            } else {
+                // Draw the player who won at the top center with a black box and also team
+                const winnerBoxWidth = ctx.rawCtx().measureText(`${winners.player} (${winners.team})`).width + 20;
+                const winnerBoxHeight = 50;
+                // also draw big box half transparent but black
+                ctx.drawRect(
+                    0,
+                    0,
+                    CANVAS_WIDTH,
+                    CANVAS_HEIGHT,
+                    "rgba(0, 0, 0, 0.5)",
+                    false,
+                    false
+                )
+                ctx.drawRect(
+                    CANVAS_WIDTH / 2 - winnerBoxWidth / 2,
+                    10,
+                    winnerBoxWidth,
+                    winnerBoxHeight,
+                    "black",
+                    false,
+                    false 
+                );
+                ctx.setTextAlign("center");
+                ctx.drawText(
+                    CANVAS_WIDTH / 2,
+                    10 + winnerBoxHeight / 2,
+                    `${winners.player} (${winners.team})`,
+                    "white",
+                    20,
+                    false,
+                    false
+                )
+                ctx.setTextAlign("left");
+            }
         }
     }
 

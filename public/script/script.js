@@ -7,6 +7,24 @@ import { gameScene, deadScene } from "./game.js";
 export let naem = ""; // Exported variable to hold the player's name
 export let lobbyPath = ""; // Exported variable to hold the lobby path
 let switched = false;
+let tips = [];
+
+// Load tips asynchronously
+fetch("/assets/loadingScreenTips.json")
+  .then(response => response.json())
+  .then(data => {
+    tips = data;
+  })
+  .catch(error => console.error("Error loading tips:", error));
+
+let randomTip = "";
+
+setTimeout(() => {
+  randomTip = tips.length > 0 ? 
+  tips[Math.floor(Math.random() * tips.length)] : 
+  "Pro tip: Wait for tips to load!";
+}, 1000);
+
 export const CANVAS_WIDTH = 1600;
 export const CANVAS_HEIGHT = 800;
 const PORT = 4566;
@@ -116,6 +134,18 @@ class menuScene extends Scene {
             "Welcome to capture-flag-io!!1",
             "white",
             50
+        );
+        // pick a random tip from the tips array
+
+
+        // draw the text rotated 45 degrees and a bit away from the 1 at the end of the text
+        ctx.drawTextRotated(
+            (CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.165) + ctx.rawCtx().measureText("Welcome to capture-flag-io!!1").width, // 16.6% of canvas width offset 
+            CANVAS_HEIGHT * 0.2 + 60, // 10% of canvas height from the top
+            randomTip,
+            "yellow",
+            10,
+            -(Math.PI / 4)
         );
     }
 }

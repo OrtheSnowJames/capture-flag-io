@@ -45,6 +45,18 @@ export class otherCtx {
         this.ctx.font = `${fontSize * zoom}px Arial`;
         this.ctx.fillText(text, posX, posY);
     }
+    drawTextRotated(x, y, text, color, fontSize, angle, cameraPos = true, cameraZoom = true) {
+        this.ctx.fillStyle = color;
+        const zoom = cameraZoom ? this.zoom : 1;
+        const posX = cameraPos ? (x - this.cameraX) * zoom : x;
+        const posY = cameraPos ? (y - this.cameraY) * zoom : y;
+        this.ctx.font = `${fontSize * zoom}px Arial`;
+        this.ctx.save();
+        this.ctx.translate(posX, posY);
+        this.ctx.rotate(angle);
+        this.ctx.fillText(text, 0, 0);
+        this.ctx.restore();
+    }
     drawImage(image, x, y, width, height, cameraPos = true, cameraZoom = true) {
         const posX = cameraPos ? (x - this.cameraX) * (cameraZoom ? this.zoom : 1) : x;
         const posY = cameraPos ? (y - this.cameraY) * (cameraZoom ? this.zoom : 1) : y;
@@ -207,6 +219,14 @@ export class OCtxButton {
         this.pressedColor = pressed;
         this.borderColor = border;
         this.textColor = text;
+    }
+    deactivate() {
+        this.enabled = false;
+        this.invisible = true;
+    }
+    activate() {
+        this.enabled = true;
+        this.invisible = true;
     }
     update(commands) {
         if (this.uneditable)
