@@ -1,0 +1,30 @@
+{
+    "map1": {
+        "name": "OG Map",
+        "objects": [
+            {
+                "type": "rect",
+                "x": "canvasWidth / 2",
+                "y": "canvasHeight / 2 - playerHeight * 2",
+                "width": "playerWidth * 4",
+                "height": "playerHeight * 4",
+                "color": "#4f4d40"
+            }
+        ],
+        "bg": "#4f4d4a",
+        "outbg": "#918777"
+    },
+    "map2": {
+        "name": "da factory",
+        "objects": [
+            {
+                "type": "img('/assets/mapassets/map2/conveyor.png)", // conveyor, to be placed on the top left of the map
+                "x": "40",
+                "y": "50",
+                "width": "img.width",
+                "height": "img.height",
+                "color": "#4f4d40"
+            } 
+        ]
+    }
+}

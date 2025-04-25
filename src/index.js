@@ -9,6 +9,7 @@ import { Server } from 'socket.io';
 import { fileURLToPath } from 'url';
 import { timeData, getRandomKeys } from './misc.js';
 import { dirname } from 'path';
+import stripJsonComments from 'strip-json-comments';
 import { json } from 'stream/consumers';
 // filepath: /home/james/Documents/capture-flag-io/node/src/index.js
 // Get the directory name of the current module
@@ -93,7 +94,21 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Origin', 'X-Requested-With', 'Accept'],
 }));
 
+// Custom route to override maps.json
+app.get('/assets/maps.json', (req, res) => {
+    fs.readFile(path.join(__dirname, 'public/assets/maps.jsonc'), 'utf8', (err, data) => {
+        if (err) {
+            console.error('Error reading maps.json:', err);
+            return res.status(500).send('Error reading maps.json');
+        }
+
+        const cleanedData = stripJsonComments(data);
+        res.send(cleanedData);
+    });
+});
+
 // Middleware to serve static files from the assets directory
+// This must come AFTER the custom maps.json route
 app.use('/assets', express.static(path.join(__dirname, 'public/assets')));
 
 // Routes
@@ -181,10 +196,23 @@ class GameServer {
         this.maintenance = true; // So no players can join during map choosing
         // Your game over logic here
         this.stopGameTimer();
-        // Get 3 random maps from maps.json
-        const maps = JSON.parse(fs.readFileSync(path.join(__dirname, 'public/assets/maps.json')));
-        const randomMaps = getRandomKeys(maps, 3);
-        this.io.emit('gameOver', { winner: this.determineWinner(), teamwinner: this.determineTeamWinner(), maps: randomMaps });
+        // Get 3 random maps from maps.jsonc
+        try {
+            const jsonData = fs.readFileSync(path.join(__dirname, 'public/assets/maps.jsonc'), 'utf8');
+            const cleanedData = stripJsonComments(jsonData);
+            const maps = JSON.parse(cleanedData);
+            const randomMaps = getRandomKeys(maps, 3);
+            // change all map names in randomMaps to be the map name
+            randomMaps.forEach((map) => {
+                console.log(maps[map].name);
+                map = maps[map].name;
+            });
+            this.io.emit('gameOver', { winner: this.determineWinner(), teamwinner: this.determineTeamWinner(), maps: randomMaps });
+        } catch (error) {
+            console.error("Error loading maps for game over:", error);
+            // Fallback to an empty array if there's an error
+            this.io.emit('gameOver', { winner: this.determineWinner(), teamwinner: this.determineTeamWinner(), maps: [] });
+        }
         // Reset the game or handle end-of-game state
         this.timestamp.setSeconds(5 * 60); // Reset timer
     }
@@ -333,6 +361,7 @@ class GameServer {
             });
 
             socket.on('move', (data) => {
+                console.log("move", data);
                 if (typeof data === 'string') data = JSON.parse(data);
                 const player = data?.name ? this.game.players[data.name] : undefined;
                 if (player) {
@@ -440,6 +469,13 @@ class GameServer {
             });
         });
     }
+
+    // New method to manually trigger game over (for admin commands)
+    forceGameOver() {
+        console.log(`Forcing game over for lobby ${this.lobby}`);
+        this.handleGameOver();
+        return true;
+    }
 }
 
 // Initialize namespaces for lobbies
@@ -526,6 +562,29 @@ process.stdin.on('data', (input) => {
         } else {
             console.log('Invalid command format. Usage: kill <lobby_number> <player_name>');
         }
+    } else if (command.startsWith('skip_round')) {
+        const parts = command.split(' ');
+        
+        if (parts.length === 2) {
+            const lobbyNumber = parseInt(parts[1], 10);
+            if (!isNaN(lobbyNumber) && lobbyNumber > 0 && lobbyNumber <= lobbies.length) {
+                const lobby = lobbies[lobbyNumber - 1];
+                if (lobby && lobby.server) {
+                    const success = lobby.server.forceGameOver();
+                    if (success) {
+                        console.log(`Round skipped for lobby ${lobbyNumber}. Voting phase initiated.`);
+                    } else {
+                        console.log(`Failed to skip round for lobby ${lobbyNumber}.`);
+                    }
+                } else {
+                    console.log(`Lobby ${lobbyNumber} does not exist or is not initialized.`);
+                }
+            } else {
+                console.log('Invalid lobby number. Usage: skip_round <lobby_number>');
+            }
+        } else {
+            console.log('Invalid command format. Usage: skip_round <lobby_number>');
+        }
     } else if (command.trim() === 'exit') {
         console.log('Exiting server...');
         // emit a kill event to all players
@@ -542,6 +601,7 @@ process.stdin.on('data', (input) => {
         console.log('Unknown command. Available commands: ');
         console.log('game <lobby_number> - Pretty-prints the GameState of the lobby number.');
         console.log('kill <lobby_number> <player_name> - Kills the player in the specified lobby.');
+        console.log('skip_round <lobby_number> - Skips the current round and starts voting phase.');
         console.log('');
         console.log('Available lobbies:');
         lobbies.forEach((lobby, index) => {

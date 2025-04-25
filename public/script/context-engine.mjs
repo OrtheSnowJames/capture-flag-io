@@ -230,7 +230,7 @@ export class OCtxButton {
     }
     activate() {
         this.enabled = true;
-        this.invisible = true;
+        this.invisible = false;
     }
     update(commands) {
         if (this.uneditable)

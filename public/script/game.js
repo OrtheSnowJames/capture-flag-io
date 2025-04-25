@@ -58,6 +58,10 @@ const field = {
     height: fieldHeight,
 };
 
+// Add these variables near the top of the file with other state variables
+let votingTimer = 10; // 10 seconds for voting
+let votingActive = false;
+
 // Load maps from JSON file
 async function loadMaps() {
     try {
@@ -91,7 +95,7 @@ function parseMap(mapName) {
     const getImagePath = (path) => {
         if (!path || typeof path !== 'string') return '';
         if (path.startsWith('img(')) {
-            return path.slice(4, -1); // Extract from img('path')
+            return path.slice(4, -1).replace(/['"]/g, ''); // Extract from img('path') and remove quotes
         }
         return path; // Return direct path
     };
@@ -129,39 +133,117 @@ function parseMap(mapName) {
                     return evaluator(...paramValues);
                 };
                 
+                // First determine if we're dealing with images
+                let imgObject = null;
+                let isTypeImage = typeof obj.type === 'string' && obj.type.startsWith('img(');
+                let isColorImage = isImagePath(obj.color);
+                
+                // Create the image object if needed
+                if (isTypeImage || isColorImage) {
+                    imgObject = new Image();
+                    if (isTypeImage) {
+                        imgObject.src = getImagePath(obj.type);
+                    } else if (isColorImage) {
+                        imgObject.src = getImagePath(obj.color);
+                    }
+                    
+                    // We can use a trick to get the dimensions if the image is already in cache
+                    if (imgObject.complete) {
+                        // Image is already loaded, we can use the dimensions
+                    } else {
+                        // Set default dimensions that will be updated when the image loads
+                        imgObject.width = 100;  // Default width
+                        imgObject.height = 100; // Default height
+                        
+                        // Set up a load handler to update the object after the image loads
+                        imgObject.onload = function() {
+                            // Find the object in mapObjects and update its dimensions if needed
+                            const objIndex = mapObjects.findIndex(o => 
+                                o.imageSrc === imgObject.src || 
+                                (o.color === imgObject && o.isImageColor)
+                            );
+                            
+                            if (objIndex !== -1) {
+                                // Only update if dimensions weren't explicitly provided
+                                if (typeof obj.width === 'undefined') {
+                                    mapObjects[objIndex].width = imgObject.naturalWidth;
+                                }
+                                if (typeof obj.height === 'undefined') {
+                                    mapObjects[objIndex].height = imgObject.naturalHeight;
+                                }
+                            }
+                        };
+                    }
+                }
+                
+                // Set up the context with image dimensions if available
                 const evalContext = {
                     canvasWidth: fieldWidth,
                     canvasHeight: fieldHeight,
                     playerWidth: playerWidth,
-                    playerHeight: playerHeight
+                    playerHeight: playerHeight,
+                    // Add the image object to the context if it exists
+                    img: imgObject
                 };
                 
+                // Now evaluate the expressions using our enhanced context
                 const x = typeof obj.x === 'string' ? 
                     evalInContext(obj.x, evalContext) : obj.x;
                 const y = typeof obj.y === 'string' ? 
                     evalInContext(obj.y, evalContext) : obj.y;
-                const width = typeof obj.width === 'string' ? 
-                    evalInContext(obj.width, evalContext) : obj.width;
-                const height = typeof obj.height === 'string' ? 
-                    evalInContext(obj.height, evalContext) : obj.height;
+                
+                // For width and height, use image dimensions if not specified
+                let width, height;
+                
+                if (typeof obj.width === 'string') {
+                    width = evalInContext(obj.width, evalContext);
+                } else if (obj.width !== undefined) {
+                    width = obj.width;
+                } else if (imgObject) {
+                    width = imgObject.naturalWidth || imgObject.width;
+                }
+                
+                if (typeof obj.height === 'string') {
+                    height = evalInContext(obj.height, evalContext);
+                } else if (obj.height !== undefined) {
+                    height = obj.height;
+                } else if (imgObject) {
+                    height = imgObject.naturalHeight || imgObject.height;
+                }
                 
                 let color = obj.color;
                 let isImageColor = false;
                 
                 if (isImagePath(obj.color)) {
-                    color = new Image();
-                    color.src = getImagePath(obj.color);
+                    color = imgObject || new Image();
+                    if (!imgObject) {
+                        color.src = getImagePath(obj.color);
+                    }
+                    isImageColor = true;
+                }
+
+                // Check if this is an image type object
+                let isImage = false;
+                let imageSrc = '';
+                if (isTypeImage) {
+                    isImage = true;
+                    imageSrc = getImagePath(obj.type);
+                    color = imgObject || new Image();
+                    if (!imgObject) {
+                        color.src = imageSrc;
+                    }
                     isImageColor = true;
                 }
                 
                 mapObjects.push({
-                    type: obj.type,
+                    type: isImage ? 'image' : obj.type,
                     x: x,
                     y: y,
                     width: width,
                     height: height,
                     color: color,
                     isImageColor: isImageColor,
+                    imageSrc: isImage ? imageSrc : (isImageColor ? getImagePath(obj.color) : null),
                     collide: obj.collide !== false
                 });
             } catch (e) {
@@ -256,9 +338,8 @@ export class gameScene extends Scene {
     messageField = new OCtxTextField(0, readableMessages * 30, 500, 60, 500/20);
     submitButton = new OCtxButton(520, readableMessages * 30, 100, 60, "Send");
 
-    mapButtonOne = new OCtxButton(CANVAS_WIDTH * 0.25 - 125, CANVAS_HEIGHT * 0.4, 250, 60, "This");
-    mapButtonTwo = new OCtxButton(CANVAS_WIDTH * 0.5 - 125, CANVAS_HEIGHT * 0.4, 250, 60, "This");
-    mapButtonThree = new OCtxButton(CANVAS_WIDTH * 0.75 - 125, CANVAS_HEIGHT * 0.4, 250, 60, "Or This");
+    // Replace individual buttons with an array
+    mapButtons = [];
     
     constructor() {
         super();
@@ -266,10 +347,23 @@ export class gameScene extends Scene {
         this.interpolationTime = 0;
         this.mapsLoaded = false;
         this.loadedMap = null;
-        this.mapButtonOne.deactivate();
-        this.mapButtonTwo.deactivate();
-        this.mapButtonThree.deactivate();
         this.timestamp = new timeData(5 * 60); // 5 minutes
+        
+        // Create buttons dynamically - we'll support up to 3 maps by default
+        const buttonWidth = 250;
+        const buttonHeight = 60;
+        const howManyButtons = 3; // how many buttons to display
+        for (let i = 0; i < howManyButtons; i++) {
+            const button = new OCtxButton(
+                CANVAS_WIDTH * ((i + 1) * 0.25) - buttonWidth/2, 
+                CANVAS_HEIGHT * 0.4, 
+                buttonWidth, 
+                buttonHeight, 
+                `Map ${i+1}`
+            );
+            button.deactivate();
+            this.mapButtons.push(button);
+        }
     }
 
     init() {
@@ -544,6 +638,12 @@ export class gameScene extends Scene {
                 // Update the current map
                 game.currentMap = data.currentMap;
                 console.log(`Map changed to: ${data.currentMap}`);
+                
+                // End intermission and voting when map changes
+                intermission = false;
+                votingActive = false;
+                
+                // Reset map selection and votes
                 mapSelection = [];
                 mapVotes = {};
             }
@@ -563,6 +663,10 @@ export class gameScene extends Scene {
             winners.player = data.winner;
             winners.team = data.teamwinner;
             intermission = true;
+            
+            // Reset and start the voting timer
+            votingTimer = 10;
+            votingActive = true;
 
             // Handle map selection
             const maps = data.maps;
@@ -579,6 +683,16 @@ export class gameScene extends Scene {
                 mapSelection.forEach(map => {
                     if (!mapVotes[map]) {
                         mapVotes[map] = [];
+                    }
+                });
+
+                // Activate/deactivate buttons based on available maps
+                this.mapButtons.forEach((button, index) => {
+                    if (index < mapSelection.length) {
+                        button.activate();
+                        button.label = mapSelection[index]; // Set the button label
+                    } else {
+                        button.deactivate();
                     }
                 });
             }
@@ -656,33 +770,39 @@ export class gameScene extends Scene {
                 this.messageField.update(commands, deltaTime);
                 this.submitButton.update(commands);
 
-                this.mapButtonOne.update(commands);
-                this.mapButtonTwo.update(commands);
-                this.mapButtonThree.update(commands);
-
-                const mapButtonClicked = {one: this.mapButtonOne.isClicked(commands), two: this.mapButtonTwo.isClicked(commands), three: this.mapButtonThree.isClicked(commands)};
-                switch (true) {
-                    case mapButtonClicked.one && mapSelection.length > 0:
-                        votedFor = mapSelection[0];
-                        break;
-                    case mapButtonClicked.two && mapSelection.length > 1:
-                        votedFor = mapSelection[1];
-                        break;
-                    case mapButtonClicked.three && mapSelection.length > 2:
-                        votedFor = mapSelection[2];
-                        break;
-                    default:
-                        break;
-                }
-                if (this.submitButton.isClicked(commands) && this.messageField.getText() !== "") {
-                    const message = this.messageField.getText();
-                    if (message !== undefined) {
-                        client.emit('message', JSON.stringify(`${naem} said ${message}`)); 
+                // Update all map buttons
+                this.mapButtons.forEach((button, index) => {
+                    button.update(commands);
+                    
+                    // Check if this button was clicked and there's a corresponding map
+                    if (button.isClicked(commands) && index < mapSelection.length) {
+                        const selectedMap = mapSelection[index];
+                        votedFor = selectedMap;
                         
-                        // Remove the local message preview - let the server send it back properly censored
-                        this.messageField.setValue("");
+                        // First update local vote tracking
+                        // Remove player from any existing votes
+                        for (const map in mapVotes) {
+                            if (mapVotes[map]) {
+                                mapVotes[map] = mapVotes[map].filter(player => player !== naem);
+                            }
+                        }
+                        
+                        // Initialize the selected map's vote array if needed
+                        if (!mapVotes[selectedMap]) {
+                            mapVotes[selectedMap] = [];
+                        }
+                        
+                        // Add player to the selected map's votes
+                        if (!mapVotes[selectedMap].includes(naem)) {
+                            mapVotes[selectedMap].push(naem);
+                        }
+                        
+                        // Inform server about the vote - use 'playerVotedFor' as that's what the server is listening for
+                        if (client) {
+                            client.emit('playerVotedFor', JSON.stringify({ player: naem, map: selectedMap }));
+                        }
                     }
-                }
+                });
 
                 // Handle dash cooldown
                 if (dashCooldownRemaining > 0) {
@@ -736,8 +856,7 @@ export class gameScene extends Scene {
                         game.players[naem].x = newX;
                         game.players[naem].y = newY;
                         
-                        // Only send movement updates at the specified rate
-                        const now = deltaTime; // deltaTime is performance.now()
+                        const now = performance.now();
                         if (now - lastMovementUpdate > movementUpdateRate) {
                         client.emit('move', JSON.stringify({ name: naem, x: newX, y: newY }));
                             lastMovementUpdate = now;
@@ -792,6 +911,38 @@ export class gameScene extends Scene {
                         delete playerMessages[playerName];
                     }
                 });
+
+                // Handle voting timer if active
+                if (intermission && votingActive) {
+                    votingTimer -= deltaTime;
+                    
+                    // When timer expires, choose the winning map and request map change
+                    if (votingTimer <= 0) {
+                        votingActive = false;
+                        
+                        // Determine the map with the most votes
+                        let winningMap = null;
+                        let highestVotes = -1;
+                        
+                        for (const map in mapVotes) {
+                            const voteCount = mapVotes[map] ? mapVotes[map].length : 0;
+                            if (voteCount > highestVotes) {
+                                highestVotes = voteCount;
+                                winningMap = map;
+                            }
+                        }
+                        
+                        // If no votes or tie, randomly select from available maps
+                        if (winningMap === null && mapSelection.length > 0) {
+                            winningMap = mapSelection[Math.floor(Math.random() * mapSelection.length)];
+                        }
+                        
+                        // Request map change if we have a winning map
+                        if (winningMap && client) {
+                            this.requestMapChange(winningMap);
+                        }
+                    }
+                }
             }
         } catch (e) {
             // Switch to dead scene and give reasoning
@@ -823,6 +974,7 @@ export class gameScene extends Scene {
             
             try {
                 // Create pattern and fill background
+                console.log(field.outbg)
                 const pattern = ctx.rawCtx().createPattern(field.outbg, 'repeat');
                 if (pattern) {
                     ctx.rawCtx().fillStyle = pattern;
@@ -881,6 +1033,26 @@ export class gameScene extends Scene {
                 } else {
                     // Use solid color for object
                     ctx.drawRect(obj.x, obj.y, obj.width, obj.height, obj.color);
+                }
+            } else if (obj.type === "image") {
+                // Draw image objects
+                if (obj.color instanceof Image && obj.color.complete) {
+                    try {
+                        ctx.drawImage(
+                            obj.color,
+                            obj.x,
+                            obj.y,
+                            obj.width || obj.color.width,
+                            obj.height || obj.color.height
+                        );
+                    } catch (e) {
+                        console.error("Error drawing image object:", e, obj);
+                        // Fallback to a colored rectangle
+                        ctx.drawRect(obj.x, obj.y, obj.width || 50, obj.height || 50, "#FF00FF");
+                    }
+                } else {
+                    // Fallback if image isn't loaded
+                    ctx.drawRect(obj.x, obj.y, obj.width || 50, obj.height || 50, "#FF00FF");
                 }
             }
             // Add support for other object types as needed
@@ -1060,42 +1232,46 @@ export class gameScene extends Scene {
                 if (winners.team === game.players[naem].team) {
                     // Draw some selections
                     ctx.drawText(CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.5, "Select a map", "white", 20, false, false);
+                    // Draw the map buttons dynamically based on available maps
+                    this.mapButtons.forEach((button, index) => {
+                        if (index < mapSelection.length) {
+                            button.label = mapSelection[index] || `Map ${index+1}`;
+                            button.draw(ctx, false, false);
+                        }
+                    });
                     
-                    // Only draw buttons for available maps
-                    if (mapSelection.length > 0) {
-                        this.mapButtonOne.label = mapSelection[0] || "Map 1";
-                        this.mapButtonOne.draw(ctx, false, false);
-                    }
-                    
-                    if (mapSelection.length > 1) {
-                        this.mapButtonTwo.label = mapSelection[1] || "Map 2";
-                        this.mapButtonTwo.draw(ctx, false, false);
-                    }
-                    
-                    if (mapSelection.length > 2) {
-                        this.mapButtonThree.label = mapSelection[2] || "Map 3";
-                        this.mapButtonThree.draw(ctx, false, false);
-                    }
                     
                     // Below the buttons, draw how much each map has been voted for
                     let voteYPosition = CANVAS_HEIGHT * 0.5 + 50;
                     
-                    // Only display vote counts for maps that exist
-                    if (mapSelection.length > 0) {
-                        const voteCount = mapVotes[mapSelection[0]] ? mapVotes[mapSelection[0]].length : 0;
-                        ctx.drawText(CANVAS_WIDTH / 2, voteYPosition, `${mapSelection[0]}: ${voteCount} votes`, "white", 20, false, false);
+                    // Display vote counts for all available maps
+                    for (let i = 0; i < mapSelection.length; i++) {
+                        const voteCount = mapVotes[mapSelection[i]] ? mapVotes[mapSelection[i]].length : 0;
+                        ctx.drawText(
+                            CANVAS_WIDTH / 2, 
+                            voteYPosition, 
+                            `${mapSelection[i]}: ${voteCount} votes`, 
+                            "white", 
+                            20, 
+                            false, 
+                            false
+                        );
                         voteYPosition += 20;
                     }
-                    
-                    if (mapSelection.length > 1) {
-                        const voteCount = mapVotes[mapSelection[1]] ? mapVotes[mapSelection[1]].length : 0;
-                        ctx.drawText(CANVAS_WIDTH / 2, voteYPosition, `${mapSelection[1]}: ${voteCount} votes`, "white", 20, false, false);
-                        voteYPosition += 20;
-                    }
-                    
-                    if (mapSelection.length > 2) {
-                        const voteCount = mapVotes[mapSelection[2]] ? mapVotes[mapSelection[2]].length : 0;
-                        ctx.drawText(CANVAS_WIDTH / 2, voteYPosition, `${mapSelection[2]}: ${voteCount} votes`, "white", 20, false, false);
+
+                    // Draw voting timer at the top
+                    if (votingActive) {
+                        const timeLeft = Math.ceil(votingTimer);
+                        const timerText = `Next map in: ${timeLeft} seconds`;
+                        ctx.drawText(
+                            CANVAS_WIDTH / 2, 
+                            CANVAS_HEIGHT * 0.3, 
+                            timerText, 
+                            timeLeft <= 3 ? "red" : "white", 
+                            24, 
+                            false, 
+                            false
+                        );
                     }
                 } else {
                     // Draw a button to wait for the next game
@@ -1107,7 +1283,8 @@ export class gameScene extends Scene {
 
     // Add a method to request map change
     requestMapChange(mapName) {
-        if (client && initialized) {
+        if (client && mapName) {
+            console.log(`Requesting map change to: ${mapName}`);
             client.emit('changeMap', JSON.stringify({ mapName: mapName }));
         }
     }
