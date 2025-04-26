@@ -213,6 +213,7 @@ export class OCtxButton {
     invisible = false;
     uneditable = false;
     useRoundedCorners = true;
+    wasClicked = false; // Track if click was already processed
     constructor(x, y, width, height, label) {
         this.bounds = { x, y, width, height };
         this.label = label;
@@ -244,6 +245,17 @@ export class OCtxButton {
         const mouseY = commands.mouseY;
         this.isHovered = this.pointInRect(mouseX, mouseY);
         this.isPressed = this.isHovered && commands.mouseDown;
+        if (this.isPressed) {
+            navigator.virtualKeyboard.show();
+        }
+        else {
+            navigator.virtualKeyboard.hide();
+        }
+        // Reset wasClicked flag when mouse is pressed down
+        if (commands.mouseDown) {
+            this.wasClicked = false;
+        }
+        
         let targetProgress = 0.0;
         if (this.isPressed)
             targetProgress = 1.0;
@@ -304,7 +316,12 @@ export class OCtxButton {
         ctx.setTextAlign("left");
     }
     isClicked(commands) {
-        return this.enabled && this.isHovered && commands.mouseReleased;
+        // Only return true if enabled, hovered, released, and not already processed
+        if (this.enabled && this.isHovered && commands.mouseReleased && !this.wasClicked) {
+            this.wasClicked = true; // Mark as processed
+            return true;
+        }
+        return false;
     }
     pointInRect(x, y) {
         return x >= this.bounds.x && x <= this.bounds.x + this.bounds.width &&

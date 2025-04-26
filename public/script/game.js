@@ -62,6 +62,9 @@ const field = {
 let votingTimer = 10; // 10 seconds for voting
 let votingActive = false;
 
+// Add this near the top with other global variables
+let isOvertime = false;
+
 // Load maps from JSON file
 async function loadMaps() {
     try {
@@ -309,6 +312,102 @@ function Task(fn) {
     (async () => {
         await fn();
     });
+}
+
+function predictMove(x, y, objectsinside = [], objectsoutside = [], mapBounds) {
+    const moveDirections = {
+        w: true, // up
+        a: true, // left
+        s: true, // down
+        d: true  // right
+    };
+    
+    // Use a larger test step (10 pixels) for collision prediction
+    // This ensures we detect collisions that would occur within a few frames
+    const testStep = 10;
+    
+    // Check boundary and object collisions for each direction
+    const testPositions = {
+        w: { x: x, y: y - testStep },  // Up movement
+        a: { x: x - testStep, y: y },  // Left movement
+        s: { x: x, y: y + testStep },  // Down movement
+        d: { x: x + testStep, y: y }   // Right movement
+    };
+    
+    // Test each direction
+    for (const [direction, pos] of Object.entries(testPositions)) {
+        // Check if inside play field bounds
+        if (pos.x < 0 || pos.x + playerWidth > field.width || 
+            pos.y < 0 || pos.y + playerHeight > field.height) {
+            moveDirections[direction] = false;
+            continue;
+        }
+        
+        // Check collision with objects player must stay outside of
+        for (const obj of objectsoutside) {
+            if (checkCollision(
+                { x: pos.x, y: pos.y, width: playerWidth, height: playerHeight },
+                obj
+            )) {
+                moveDirections[direction] = false;
+                break;
+            }
+        }
+        
+        // Skip further checks if already determined can't move in this direction
+        if (!moveDirections[direction]) continue;
+        
+        // Check collision with objects player must stay inside of
+        for (const obj of objectsinside) {
+            if (!checkCollision(
+                { x: pos.x, y: pos.y, width: playerWidth, height: playerHeight },
+                { x: obj.x, y: obj.y, width: obj.width, height: obj.height }
+            )) {
+                moveDirections[direction] = false;
+                break;
+            }
+        }
+        
+        // Skip further checks if already determined can't move in this direction
+        if (!moveDirections[direction]) continue;
+        
+        // Check collision with map objects based on their collideType
+        for (const obj of mapObjects) {
+            // Skip objects that are already checked in objectsinside or objectsoutside
+            const isAlreadyChecked = [...objectsinside, ...objectsoutside].some(checkedObj => 
+                checkedObj.x === obj.x && 
+                checkedObj.y === obj.y && 
+                checkedObj.width === obj.width && 
+                checkedObj.height === obj.height
+            );
+            
+            if (isAlreadyChecked) continue;
+            
+            // Handle different collision types
+            if (obj.collideType === 'outside') {
+                // Player must stay outside these objects
+                if (checkCollision(
+                    { x: pos.x, y: pos.y, width: playerWidth, height: playerHeight },
+                    obj
+                )) {
+                    moveDirections[direction] = false;
+                    break;
+                }
+            } else if (obj.collideType === 'inside') {
+                // Player must stay inside these objects
+                if (!checkCollision(
+                    { x: pos.x, y: pos.y, width: playerWidth, height: playerHeight },
+                    obj
+                )) {
+                    moveDirections[direction] = false;
+                    break;
+                }
+            }
+            // If collideType is null, no collision check needed
+        }
+    }
+    
+    return moveDirections;
 }
 
 function canMove(x, y, objectsinside = [], objectsoutside = []) {
@@ -700,6 +799,10 @@ export class gameScene extends Scene {
                 // End intermission and voting when map changes
                 intermission = false;
                 votingActive = false;
+                isOvertime = false;
+                
+                // Reset timer to 5 minutes when new map is loaded
+                this.timestamp = new timeData(5 * 60);
                 
                 // Reset map selection and votes
                 mapSelection = [];
@@ -710,7 +813,26 @@ export class gameScene extends Scene {
         client.on('timerUpdate', (timeString) => {
             // Update the local timestamp display with the server's time
             if (initialized) {
-                this.timestamp.setFromString(timeString);
+                if (timeString === "OVERTIME") {
+                    isOvertime = true;
+                } else {
+                    isOvertime = false;
+                    this.timestamp.setFromString(timeString);
+                }
+            }
+        });
+
+        client.on('overtimeStarted', (message) => {
+            // Display overtime message
+            isOvertime = true;
+            
+            // Add message to game messages
+            if (game.messages) {
+                game.messages.push("OVERTIME: " + message);
+                // Keep only the last 10 messages
+                if (game.messages.length > 10) {
+                    game.messages.shift();
+                }
             }
         });
 
@@ -721,6 +843,11 @@ export class gameScene extends Scene {
             winners.player = data.winner;
             winners.team = data.teamwinner;
             intermission = true;
+            isOvertime = false;
+            
+            // Stop local timer countdown during intermission
+            // Will be reset when a new map is loaded
+            this.timestamp = new timeData(5 * 60);
             
             // Reset and start the voting timer
             votingTimer = 10;
@@ -780,11 +907,14 @@ export class gameScene extends Scene {
         try {
             client = await io(`${lobbyPath}`,  { transports: ['websocket'], upgrade: false });
         
-        await this.setupListeners();
-        
-        setTimeout(() => {
-            client.emit('name', naem);
-        }, 100);
+            await this.setupListeners();
+            
+            // Reset client-side timer
+            this.timestamp = new timeData(5 * 60);
+            
+            setTimeout(() => {
+                client.emit('name', naem);
+            }, 100);
         } catch (error) {
             commands.globals.reason = "Failed to connect to server. Please try again.";
             commands.switchScene(2);
@@ -821,15 +951,23 @@ export class gameScene extends Scene {
                 }
                 
                 let moved = false;
-                let newX = game.players[naem].x;
-                let newY = game.players[naem].y;
 
                 // Update timestamp - was accidentally removed
-                this.timestamp.setSeconds(this.timestamp.seconds() - deltaTime);
+                // Only decrease time if not in overtime
+                if (!isOvertime) {
+                    this.timestamp.setSeconds(this.timestamp.seconds() - deltaTime);
+                }
                 
                 // UI
                 this.messageField.update(commands, deltaTime);
                 this.submitButton.update(commands);
+
+                if (this.submitButton.isClicked(commands)) {
+                    // Submit message to server
+                    if (client) {
+                        client.emit('message', `${naem} said ${this.messageField.text}`);
+                    }
+                }
 
                 // Update all map buttons
                 this.mapButtons.forEach((button, index) => {
@@ -902,43 +1040,45 @@ export class gameScene extends Scene {
                 // Apply movement speed (dash effect increases speed)
                 const speed = dashActive ? moveSpeed * dashMultiplier : moveSpeed;
                 
-                // Process movement input
-                if (commands.keys['ArrowUp'] || commands.keys['w']) {
-                    newY -= speed * deltaTime;
-                    moved = true;
+                // Filter mapObjects to separate inside and outside objects
+                const insideObjects = [field, ...mapObjects.filter(obj => obj.collideType === 'inside')];
+                const outsideObjects = mapObjects.filter(obj => obj.collideType === 'outside');
+                
+                // Use predictMove to get valid move directions
+                const moveDirections = predictMove(game.players[naem].x, game.players[naem].y, insideObjects, outsideObjects, field);
+                
+                // Apply movement only in valid directions
+                let validX = game.players[naem].x;
+                let validY = game.players[naem].y;
+                
+                if ((commands.keys['ArrowUp'] || commands.keys['w']) && moveDirections.w) {
+                    validY -= speed * deltaTime;
                 }
-                if (commands.keys['ArrowLeft'] || commands.keys['a']) {
-                    newX -= speed * deltaTime;
-                    moved = true;
+                if ((commands.keys['ArrowLeft'] || commands.keys['a']) && moveDirections.a) {
+                    validX -= speed * deltaTime;
                 }
-                if (commands.keys['ArrowDown'] || commands.keys['s']) {
-                    newY += speed * deltaTime;
-                    moved = true;
+                if ((commands.keys['ArrowDown'] || commands.keys['s']) && moveDirections.s) {
+                    validY += speed * deltaTime;
                 }
-                if (commands.keys['ArrowRight'] || commands.keys['d']) {
-                    newX += speed * deltaTime;
-                    moved = true;
+                if ((commands.keys['ArrowRight'] || commands.keys['d']) && moveDirections.d) {
+                    validX += speed * deltaTime;
                 }
-
-                if (moved) {
-                    // Prepare collision objects
-                    const insideObjects = [field]; // Must stay inside the field
+                
+                // Final collision check to prevent getting stuck
+                if (!canMove(validX, validY, insideObjects, outsideObjects)) {
+                    validX = game.players[naem].x;
+                    validY = game.players[naem].y;
+                }
+                
+                // Only update position if it changed and we're not in intermission
+                if ((validX !== game.players[naem].x || validY !== game.players[naem].y) && !intermission) {
+                    game.players[naem].x = validX;
+                    game.players[naem].y = validY;
                     
-                    // Add any map objects with 'inside' collision type
-                    const mapInsideObjects = mapObjects.filter(obj => obj.collideType === 'inside');
-                    
-                    // Objects the player must stay outside of
-                    const outsideObjects = mapObjects.filter(obj => obj.collideType === 'outside');
-                    
-                    if (canMove(newX, newY, [...insideObjects, ...mapInsideObjects], outsideObjects) && !intermission) {
-                        game.players[naem].x = newX;
-                        game.players[naem].y = newY;
-                        
-                        const now = performance.now();
-                        if (now - lastMovementUpdate > movementUpdateRate) {
-                            client.emit('move', JSON.stringify({ name: naem, x: newX, y: newY }));
-                            lastMovementUpdate = now;
-                        }
+                    const now = performance.now();
+                    if (now - lastMovementUpdate > movementUpdateRate) {
+                        client.emit('move', JSON.stringify({ name: naem, x: validX, y: validY }));
+                        lastMovementUpdate = now;
                     }
                 }
 
@@ -1025,7 +1165,7 @@ export class gameScene extends Scene {
         } catch (e) {
             // Switch to dead scene and give reasoning
             console.error("Game error:", e);
-            commands.globals.reason = "Client side error: " + e.message;
+            commands.globals.reason = "Client side error, may be death, for nerds: " + e.message;
             commands.switchScene(2);
             return;
         }
@@ -1226,7 +1366,7 @@ export class gameScene extends Scene {
                     if (flag.capturedBy) {
                         const player = game.players[flag.capturedBy];
                         if (player && player.x && player.y) {
-                            ctx.drawLine(flag.x + flagWidth/2, flag.y + flagHeight / 2, player.x + playerWidth / 2, player.y + playerHeight / 2, "purple");
+                            ctx.drawLine(flag.x + flagWidth/2, flag.y + flagHeight / 9, player.x + playerWidth / 2, player.y + playerHeight / 2, "purple");
                         }
                     }
                 }
@@ -1325,7 +1465,7 @@ export class gameScene extends Scene {
 
             // Draw Timer at the top center with black box
             if (!intermission) {
-                const timerBoxWidth = 100;
+                const timerBoxWidth = 150; // Made wider to accommodate OVERTIME text
                 const timerBoxHeight = 50;
                 ctx.drawRect(
                     CANVAS_WIDTH / 2 - timerBoxWidth / 2,
@@ -1337,15 +1477,29 @@ export class gameScene extends Scene {
                     false
                 );
                 ctx.setTextAlign("center");
-                ctx.drawText(
-                    CANVAS_WIDTH / 2,
-                    10 + timerBoxHeight / 2,
-                    this.timestamp.string(),
-                    "white",
-                    20,
-                    false,
-                    false
-                )
+                
+                // Display OVERTIME or timer
+                if (isOvertime) {
+                    ctx.drawText(
+                        CANVAS_WIDTH / 2,
+                        10 + timerBoxHeight / 2,
+                        "OVERTIME",
+                        "red", // Red color for emphasis
+                        20,
+                        false,
+                        false
+                    );
+                } else {
+                    ctx.drawText(
+                        CANVAS_WIDTH / 2,
+                        10 + timerBoxHeight / 2,
+                        this.timestamp.string(),
+                        "white",
+                        20,
+                        false,
+                        false
+                    );
+                }
                 ctx.setTextAlign("left");
             } else {
                 // Draw the player who won at the top center with a black box and also team

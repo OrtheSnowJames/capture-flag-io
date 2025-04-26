@@ -4,7 +4,7 @@ import http from 'http';
 import path from 'path';
 import cors from 'cors';
 import fs from 'fs';
-import { profanity } from '@2toad/profanity';
+import { Filter } from 'bad-words';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'url';
 import { timeData, getRandomKeys } from './misc.js';
@@ -38,6 +38,7 @@ const flagHeight = 100;
 const moveSpeed = 75;
 const cameraWidth = 200;
 const cameraHeight = 200;
+const filter = new Filter();
 
 const fieldWidth = 1000;
 const fieldHeight = 500;
@@ -54,11 +55,11 @@ function checkCollisionPlayerFlag(player, flag) {
 }
 
 function isProfane(something) {
-    return profanity.exists(something);
+    return filter.isProfane(something);
 }
 
 function censorProfanity(something) {
-    return profanity.censor(something);
+    return filter.clean(something);
 }
 
 function canMove(x, y) {
@@ -148,6 +149,7 @@ class GameServer {
         this.timestamp = new timeData(5 * 60); // 5 minutes
         this.timerInterval = null;
         this.timerRunning = false;
+        this.inOvertime = false; // Track if the game is in overtime
         this.game = {
             players: {},
             flags: {
@@ -167,16 +169,39 @@ class GameServer {
         this.timerInterval = setInterval(() => {
             // Only countdown if there are players
             if (this.count > 0) {
-                // Decrement by 1 second
-                this.timestamp.setSeconds(this.timestamp.seconds() - 1);
-                
-                // Emit the updated time to all clients
-                this.io.emit('timerUpdate', this.timestamp.string());
-                
-                // Check for game end condition
-                if (this.timestamp.seconds() <= 0) {
-                    // Game over logic
-                    this.handleGameOver();
+                // In overtime, we don't decrement time but check scores each tick
+                if (this.inOvertime) {
+                    // Check if scores are no longer tied
+                    const { redScore, blueScore } = this.getTeamScores();
+                    if (redScore !== blueScore) {
+                        // Overtime ends when scores are different
+                        this.handleGameOver();
+                    } else {
+                        // Still tied, continue overtime
+                        this.io.emit('timerUpdate', "OVERTIME");
+                    }
+                } else {
+                    // Normal time countdown
+                    // Decrement by 1 second
+                    this.timestamp.setSeconds(this.timestamp.seconds() - 1);
+                    
+                    // Emit the updated time to all clients
+                    this.io.emit('timerUpdate', this.timestamp.string());
+                    
+                    // Check for game end condition
+                    if (this.timestamp.seconds() <= 0) {
+                        // Check if scores are tied for overtime
+                        const { redScore, blueScore } = this.getTeamScores();
+                        if (redScore === blueScore && redScore > 0) {
+                            // Enter overtime
+                            this.inOvertime = true;
+                            this.io.emit('overtimeStarted', "Teams are tied! Game continues until one team scores.");
+                            this.io.emit('timerUpdate', "OVERTIME");
+                        } else {
+                            // Game over - not tied or no points scored
+                            this.handleGameOver();
+                        }
+                    }
                 }
             }
         }, 1000); // Run every 1000ms (1 second)
@@ -190,11 +215,27 @@ class GameServer {
             this.timerInterval = null;
         }
         this.timerRunning = false;
+        this.inOvertime = false;
+    }
+
+    // Helper method to get team scores
+    getTeamScores() {
+        let redScore = 0;
+        let blueScore = 0;
+        
+        Object.values(this.game.players).forEach(player => {
+            if (player.team === "red") {
+                redScore += player.score || 0;
+            } else if (player.team === "blue") {
+                blueScore += player.score || 0;
+            }
+        });
+        
+        return { redScore, blueScore };
     }
 
     handleGameOver() {
         this.maintenance = true; // So no players can join during map choosing
-        // Your game over logic here
         this.stopGameTimer();
         // Get 3 random maps from maps.jsonc
         try {
@@ -215,6 +256,7 @@ class GameServer {
         }
         // Reset the game or handle end-of-game state
         this.timestamp.setSeconds(5 * 60); // Reset timer
+        this.inOvertime = false;
     }
 
     determineWinner() {
@@ -230,16 +272,14 @@ class GameServer {
     }
 
     determineTeamWinner() {
-        // get the score of a team
-        let redScore = 0;
-        let blueScore = 0;
-        for (const player in this.game.players) {
-            if (this.game.players[player].team === "red") {
-                redScore++;
-            } else {
-                blueScore++;
-            }
+        // Get the total score of each team
+        const { redScore, blueScore } = this.getTeamScores();
+        
+        // If scores are tied, determine winner based on number of players (fallback)
+        if (redScore === blueScore) {
+            return this.reds > this.blues ? "red" : "blue";
         }
+        
         return redScore > blueScore ? "red" : "blue";
     }
 
@@ -362,7 +402,6 @@ class GameServer {
             });
 
             socket.on('move', (data) => {
-                console.log("move", data);
                 if (typeof data === 'string') data = JSON.parse(data);
                 const player = data?.name ? this.game.players[data.name] : undefined;
                 if (player) {
