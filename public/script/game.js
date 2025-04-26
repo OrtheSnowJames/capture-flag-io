@@ -75,6 +75,35 @@ async function loadMaps() {
     }
 }
 
+function checkCollision(objA, objB) {
+    // Simple AABB collision for non-rotated objects
+    if (!objB.rotation) {
+        return objA.x < objB.x + objB.width &&
+               objA.x + objA.width > objB.x &&
+               objA.y < objB.y + objB.height &&
+               objA.y + objA.height > objB.y;
+    } else {
+        // For rotated objects, we need a more complex check
+        // For now, approximate with a simpler check based on the center distance
+        // This is an approximation and could be improved with proper rotated rectangle collision
+        const centerAX = objA.x + objA.width / 2;
+        const centerAY = objA.y + objA.height / 2;
+        const centerBX = objB.x + objB.width / 2;
+        const centerBY = objB.y + objB.height / 2;
+        
+        // Calculate distance between centers
+        const dx = centerAX - centerBX;
+        const dy = centerAY - centerBY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Use the maximum of half-width and half-height as a rough approximation
+        const radiusA = Math.max(objA.width, objA.height) / 2;
+        const radiusB = Math.max(objB.width, objB.height) / 2;
+        
+        return distance < (radiusA + radiusB);
+    }
+}
+
 // Parse map data and create game objects
 function parseMap(mapName) {
     if (!maps[mapName]) {
@@ -235,8 +264,26 @@ function parseMap(mapName) {
                     isImageColor = true;
                 }
                 
+                // Get rotation if specified (in radians)
+                let rotation = 0;
+                if (typeof obj.rotation === 'string') {
+                    rotation = evalInContext(obj.rotation, evalContext);
+                } else if (typeof obj.rotation === 'number') {
+                    rotation = obj.rotation;
+                }
+                
+                // Determine collision type: 'inside', 'outside', or null (no collision)
+                let collideType = null;
+                if (obj.collide === 'inside') {
+                    collideType = 'inside';
+                } else if (obj.collide === 'outside' || obj.collide === true) {
+                    collideType = 'outside';
+                }
+                // If obj.collide is false or undefined, collideType remains null
+                
                 mapObjects.push({
                     type: isImage ? 'image' : obj.type,
+                    functionalType: obj.type,
                     x: x,
                     y: y,
                     width: width,
@@ -244,7 +291,9 @@ function parseMap(mapName) {
                     color: color,
                     isImageColor: isImageColor,
                     imageSrc: isImage ? imageSrc : (isImageColor ? getImagePath(obj.color) : null),
-                    collide: obj.collide !== false
+                    collideType: collideType, // New property to store collision type
+                    rotation: rotation,
+                    property: obj.property
                 });
             } catch (e) {
                 console.error("Error parsing map object:", e, obj);
@@ -268,31 +317,28 @@ function canMove(x, y, objectsinside = [], objectsoutside = []) {
         return false;
     }
     
-    // Check collision with "outside" objects (can't be inside these)
+    // Check collision with objects player must stay outside of (can't be inside these)
     for (const obj of objectsoutside) {
-        if (x >= obj.x &&
-            x + playerWidth <= obj.x + obj.width &&
-            y >= obj.y &&
-            y + playerHeight <= obj.y + obj.height) {
+        if (checkCollision(
+            { x: x, y: y, width: playerWidth, height: playerHeight },
+            obj
+        )) {
             return false; // Inside an object you cannot be inside of
         }
     }
 
-    // Check collision with "inside" objects (must stay inside these)
+    // Check collision with objects player must stay inside of
     for (const obj of objectsinside) {
-        if (x < obj.x ||
-            x + playerWidth > obj.x + obj.width ||
-            y < obj.y ||
-            y + playerHeight > obj.y + obj.height) {
+        if (!checkCollision(
+            { x: x, y: y, width: playerWidth, height: playerHeight },
+            { x: obj.x, y: obj.y, width: obj.width, height: obj.height }
+        )) {
             return false; // Outside an object you must be inside of
         }
     }
     
-    // Check collision with map objects (that aren't already in objectsinside/objectsoutside)
+    // Check collision with map objects based on their collideType
     for (const obj of mapObjects) {
-        // Skip non-collidable objects
-        if (obj.collide === false) continue;
-        
         // Skip objects that are already checked in objectsinside or objectsoutside
         const isAlreadyChecked = [...objectsinside, ...objectsoutside].some(checkedObj => 
             checkedObj.x === obj.x && 
@@ -303,13 +349,25 @@ function canMove(x, y, objectsinside = [], objectsoutside = []) {
         
         if (isAlreadyChecked) continue;
         
-        // Default behavior is to treat map objects as "outside" objects (can't be inside)
-        if (x >= obj.x &&
-            x + playerWidth <= obj.x + obj.width &&
-            y >= obj.y &&
-            y + playerHeight <= obj.y + obj.height) {
-            return false; // Inside a map object you cannot be inside of
+        // Handle different collision types
+        if (obj.collideType === 'outside') {
+            // Player must stay outside these objects
+            if (checkCollision(
+                { x: x, y: y, width: playerWidth, height: playerHeight },
+                obj
+            )) {
+                return false; // Collision with 'outside' object - can't move here
+            }
+        } else if (obj.collideType === 'inside') {
+            // Player must stay inside these objects
+            if (!checkCollision(
+                { x: x, y: y, width: playerWidth, height: playerHeight },
+                obj
+            )) {
+                return false; // Not inside an 'inside' object - can't move here
+            }
         }
+        // If collideType is null, no collision check needed
     }
 
     return true; // Valid position
@@ -766,6 +824,9 @@ export class gameScene extends Scene {
                 let newX = game.players[naem].x;
                 let newY = game.players[naem].y;
 
+                // Update timestamp - was accidentally removed
+                this.timestamp.setSeconds(this.timestamp.seconds() - deltaTime);
+                
                 // UI
                 this.messageField.update(commands, deltaTime);
                 this.submitButton.update(commands);
@@ -804,24 +865,44 @@ export class gameScene extends Scene {
                     }
                 });
 
-                // Handle dash cooldown
-                if (dashCooldownRemaining > 0) {
-                    dashCooldownRemaining -= deltaTime;
-                }
+                // Check if player is on a dashpad
+                const onDashpad = checkPlayerOnDashpad(game.players[naem]);
+                
+                // Handle dash mechanics
+                if (onDashpad) {
+                    // Player is on a dashpad - just enable dash effect
+                    dashActive = true;
+                    dashTimeRemaining = dashDuration; // Keep refreshing dash duration
+                    // Player maintains control over direction
+                } else {
+                    // Normal dash mechanics
+                    if (dashCooldownRemaining > 0) {
+                        dashCooldownRemaining -= deltaTime;
+                    }
+                    
+                    if (dashActive) {
+                        dashTimeRemaining -= deltaTime;
+                        if (dashTimeRemaining <= 0) {
+                            dashActive = false;
+                        }
+                    }
+                    
+                    // Trigger dash on spacebar press
+                    if (commands.keys[' '] && dashCooldownRemaining <= 0 && !dashActive) {
+                        dashActive = true;
+                        dashTimeRemaining = dashDuration;
+                        dashCooldownRemaining = dashCooldown;
+                    }
 
-                // Handle active dash
-                if (dashActive) {
-                    dashTimeRemaining -= deltaTime;
-                    if (dashTimeRemaining <= 0) {
-                        dashActive = false; // End the dash
+                    if (commands.keys['Enter']) {
+                        window.location.reload();
                     }
                 }
 
-                // Update timestamp
-                this.timestamp.setSeconds(this.timestamp.seconds() - deltaTime);
-
+                // Apply movement speed (dash effect increases speed)
                 const speed = dashActive ? moveSpeed * dashMultiplier : moveSpeed;
-
+                
+                // Process movement input
                 if (commands.keys['ArrowUp'] || commands.keys['w']) {
                     newY -= speed * deltaTime;
                     moved = true;
@@ -839,26 +920,23 @@ export class gameScene extends Scene {
                     moved = true;
                 }
 
-                // Trigger dash on spacebar press
-                if (commands.keys[' '] && dashCooldownRemaining <= 0 && !dashActive) {
-                    dashActive = true;
-                    dashTimeRemaining = dashDuration;
-                    dashCooldownRemaining = dashCooldown;
-                }
-
                 if (moved) {
-                    // For consistency with previous behavior, we pass field as objectsinside
-                    // and any objects that need special handling as objectsoutside
+                    // Prepare collision objects
                     const insideObjects = [field]; // Must stay inside the field
-                    const outsideObjects = mapObjects.filter(obj => obj.type === "rect" && obj.collide !== false);
                     
-                    if (canMove(newX, newY, insideObjects, outsideObjects) && !intermission) {
+                    // Add any map objects with 'inside' collision type
+                    const mapInsideObjects = mapObjects.filter(obj => obj.collideType === 'inside');
+                    
+                    // Objects the player must stay outside of
+                    const outsideObjects = mapObjects.filter(obj => obj.collideType === 'outside');
+                    
+                    if (canMove(newX, newY, [...insideObjects, ...mapInsideObjects], outsideObjects) && !intermission) {
                         game.players[naem].x = newX;
                         game.players[naem].y = newY;
                         
                         const now = performance.now();
                         if (now - lastMovementUpdate > movementUpdateRate) {
-                        client.emit('move', JSON.stringify({ name: naem, x: newX, y: newY }));
+                            client.emit('move', JSON.stringify({ name: naem, x: newX, y: newY }));
                             lastMovementUpdate = now;
                         }
                     }
@@ -946,7 +1024,8 @@ export class gameScene extends Scene {
             }
         } catch (e) {
             // Switch to dead scene and give reasoning
-            commands.globals.reason = "Client side error, may be death, for nerds: Failed to update game state: " + e.message;
+            console.error("Game error:", e);
+            commands.globals.reason = "Client side error: " + e.message;
             commands.switchScene(2);
             return;
         }
@@ -1015,36 +1094,109 @@ export class gameScene extends Scene {
 
         // Draw all map objects
         mapObjects.forEach(obj => {
+            // Handle rotation for all object types
+            const hasRotation = obj.rotation !== undefined && obj.rotation !== 0;
+            
             if (obj.type === "rect") {
                 if (obj.isImageColor && obj.color instanceof Image && obj.color.complete) {
-                    // Draw rectangle with image fill
-                    ctx.drawRect(obj.x, obj.y, obj.width, obj.height, "#4f4d40"); // Fallback color
-                    try {
-                        ctx.rawCtx().drawImage(
-                            obj.color,
-                            obj.x - ctx.cameraX * ctx.zoom,
-                            obj.y - ctx.cameraY * ctx.zoom,
-                            obj.width * ctx.zoom,
-                            obj.height * ctx.zoom
-                        );
-                    } catch (e) {
-                        console.error("Error drawing object image:", e);
+                    // Draw rectangle with image fill and possible rotation
+                    if (hasRotation) {
+                        try {
+                            // Create a temporary canvas for the rotated image rectangle
+                            const tempCanvas = document.createElement('canvas');
+                            const tempCtx = tempCanvas.getContext('2d');
+                            tempCanvas.width = obj.width;
+                            tempCanvas.height = obj.height;
+                            
+                            // Draw the image to the temp canvas
+                            tempCtx.drawImage(obj.color, 0, 0, obj.width, obj.height);
+                            
+                            // Draw the rotated image
+                            ctx.drawImageRotated(
+                                tempCanvas,
+                                obj.x, 
+                                obj.y, 
+                                obj.width, 
+                                obj.height, 
+                                obj.rotation
+                            );
+                        } catch (e) {
+                            console.error("Error drawing rotated object image:", e);
+                            // Fallback to non-rotated rectangle
+                            ctx.drawRect(obj.x, obj.y, obj.width, obj.height, "#4f4d40");
+                        }
+                    } else {
+                        // Non-rotated rectangle with image fill (original code)
+                        ctx.drawRect(obj.x, obj.y, obj.width, obj.height, "#4f4d40"); // Fallback color
+                        try {
+                            ctx.rawCtx().drawImage(
+                                obj.color,
+                                obj.x - ctx.cameraX * ctx.zoom,
+                                obj.y - ctx.cameraY * ctx.zoom,
+                                obj.width * ctx.zoom,
+                                obj.height * ctx.zoom
+                            );
+                        } catch (e) {
+                            console.error("Error drawing object image:", e);
+                        }
                     }
                 } else {
-                    // Use solid color for object
-                    ctx.drawRect(obj.x, obj.y, obj.width, obj.height, obj.color);
+                    // Solid color rectangle
+                    if (hasRotation) {
+                        // For rotated rectangles, we need to use a different approach
+                        // Save context state
+                        const rawCtx = ctx.rawCtx();
+                        rawCtx.save();
+                        
+                        // Set up the transformation
+                        const centerX = obj.x + obj.width/2;
+                        const centerY = obj.y + obj.height/2;
+                        const adjustedX = centerX - ctx.cameraX * ctx.zoom;
+                        const adjustedY = centerY - ctx.cameraY * ctx.zoom;
+                        
+                        rawCtx.translate(adjustedX, adjustedY);
+                        rawCtx.rotate(obj.rotation);
+                        
+                        // Draw the rectangle
+                        rawCtx.fillStyle = obj.color;
+                        rawCtx.fillRect(
+                            -obj.width/2 * ctx.zoom, 
+                            -obj.height/2 * ctx.zoom, 
+                            obj.width * ctx.zoom, 
+                            obj.height * ctx.zoom
+                        );
+                        
+                        // Restore context
+                        rawCtx.restore();
+                    } else {
+                        // Non-rotated rectangle (original code)
+                        ctx.drawRect(obj.x, obj.y, obj.width, obj.height, obj.color);
+                    }
                 }
             } else if (obj.type === "image") {
-                // Draw image objects
+                // Draw image objects with rotation if specified
                 if (obj.color instanceof Image && obj.color.complete) {
                     try {
-                        ctx.drawImage(
-                            obj.color,
-                            obj.x,
-                            obj.y,
-                            obj.width || obj.color.width,
-                            obj.height || obj.color.height
-                        );
+                        if (hasRotation) {
+                            // Draw rotated image
+                            ctx.drawImageRotated(
+                                obj.color,
+                                obj.x, 
+                                obj.y, 
+                                obj.width || obj.color.width,
+                                obj.height || obj.color.height,
+                                obj.rotation
+                            );
+                        } else {
+                            // Draw non-rotated image (original code)
+                            ctx.drawImage(
+                                obj.color,
+                                obj.x,
+                                obj.y,
+                                obj.width || obj.color.width,
+                                obj.height || obj.color.height
+                            );
+                        }
                     } catch (e) {
                         console.error("Error drawing image object:", e, obj);
                         // Fallback to a colored rectangle
@@ -1355,4 +1507,26 @@ export class deadScene extends Scene {
             }
         }
     }
+}
+
+// Update the check function to handle null or undefined objects gracefully
+function checkPlayerOnDashpad(player) {
+    if (!player || typeof player !== 'object') return false;
+    
+    for (const obj of mapObjects) {
+        try {
+            if (obj && obj.property && obj.property.dashpad === true) {
+                if (checkCollision(
+                    { x: player.x, y: player.y, width: playerWidth, height: playerHeight },
+                    obj
+                )) {
+                    return true; // Player is on a dashpad
+                }
+            }
+        } catch (e) {
+            console.error("Error checking dashpad collision:", e);
+            // Continue checking other objects instead of failing completely
+        }
+    }
+    return false; // Not on a dashpad
 }

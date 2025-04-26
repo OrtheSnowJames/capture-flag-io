@@ -8,7 +8,8 @@
                 "y": "canvasHeight / 2 - playerHeight * 2",
                 "width": "playerWidth * 4",
                 "height": "playerHeight * 4",
-                "color": "#4f4d40"
+                "color": "#4f4d40",
+                "collide": "outside" // must be outside
             }
         ],
         "bg": "#4f4d4a",
@@ -23,8 +24,28 @@
                 "y": "50",
                 "width": "img.width",
                 "height": "img.height",
-                "color": "#4f4d40"
-            } 
+                "color": "#4f4d40",
+                "rotation": "0", // Changed from 90 degrees to 0 degrees to push upward
+                "property": {
+                    "dashpad": true   
+                }
+            }, 
+            // make some objects to stop people from going to the side of the conveyor belt
+            {
+                "type": "rect",
+                "x": "40",
+                "y": "50",
+                "width": "10",
+                "height": "10",
+                "color": "rgba(0, 0, 0, 0)",
+                "collide": "outside"
+            },
+            {
+                "type": "rect",
+                "x": "40",
+                "y": "",
+                "width": "10"
+            }
         ]
     }
 }

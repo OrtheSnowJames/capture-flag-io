@@ -280,6 +280,7 @@ class GameServer {
             // Notify all clients about the map change
             this.io.emit('mapChange', JSON.stringify({ currentMap: mapName }));
             console.log(`Map changed to: ${mapName}`);
+            this.maintenance = false;
         }
     }
 
