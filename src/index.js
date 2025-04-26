@@ -243,12 +243,10 @@ class GameServer {
             const cleanedData = stripJsonComments(jsonData);
             const maps = JSON.parse(cleanedData);
             const randomMaps = getRandomKeys(maps, 3);
-            // change all map names in randomMaps to be the map name
-            randomMaps.forEach((map) => {
-                console.log(maps[map].name);
-                map = maps[map].name;
-            });
-            this.io.emit('gameOver', { winner: this.determineWinner(), teamwinner: this.determineTeamWinner(), maps: randomMaps });
+            // Fix: Create a new array with the map names instead of trying to modify in place
+            const mapNames = randomMaps.map(map => maps[map].name);
+            console.log("Selected maps for voting:", mapNames);
+            this.io.emit('gameOver', { winner: this.determineWinner(), teamwinner: this.determineTeamWinner(), maps: mapNames });
         } catch (error) {
             console.error("Error loading maps for game over:", error);
             // Fallback to an empty array if there's an error
@@ -321,6 +319,8 @@ class GameServer {
             this.io.emit('mapChange', JSON.stringify({ currentMap: mapName }));
             console.log(`Map changed to: ${mapName}`);
             this.maintenance = false;
+            this.timestamp.setSeconds(5 * 60);
+            this.startGameTimer();
         }
     }
 

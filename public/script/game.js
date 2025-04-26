@@ -107,14 +107,24 @@ function checkCollision(objA, objB) {
     }
 }
 
+function getMapByName(mapName) {
+    // loop through maps and find the map object that matches the name
+    for (const key of Object.keys(maps)) {
+        if (maps[key].name === mapName) {
+            return maps[key];
+        }
+    }
+    return null;
+}
+
 // Parse map data and create game objects
 function parseMap(mapName) {
-    if (!maps[mapName]) {
+    if (!getMapByName(mapName)) {
         console.error(`Map ${mapName} not found`);
         return false;
     }
     
-    const map = maps[mapName];
+    const map = getMapByName(mapName);
     currentMapData = map;
     
     // Helper function to check if a string is an image path
@@ -895,7 +905,7 @@ export class gameScene extends Scene {
         this.mapsLoaded = true;
         
         // Parse default map
-        if (!parseMap("map1")) {
+        if (!parseMap("OG Map")) {
             commands.globals.reason = "Failed to parse default map. Please try again.";
             commands.switchScene(2);
             return;

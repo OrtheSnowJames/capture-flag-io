@@ -29,22 +29,28 @@
                 "property": {
                     "dashpad": true   
                 }
-            }, 
-            // make some objects to stop people from going to the side of the conveyor belt
-            {
-                "type": "rect",
-                "x": "40",
-                "y": "50",
-                "width": "10",
-                "height": "10",
-                "color": "rgba(0, 0, 0, 0)",
-                "collide": "outside"
             },
+            // make some other conveyor belts
             {
-                "type": "rect",
-                "x": "40",
-                "y": "",
-                "width": "10"
+                "type": "img('/assets/mapassets/map2/conveyor.png)", // conveyor, to be placed on the top left of the map
+                "x": "919",
+                "y": "300",
+                "width": "img.width",
+                "height": "img.height",
+                "color": "#4f4d40",
+                "rotation": "0", // Changed from 90 degrees to 0 degrees to push upward
+                "property": {
+                    "dashpad": true   
+                }
+            },
+            // middle cube but box (/assets/mapassets/map2/ironbox.png)
+            {
+                "type": "img('/assets/mapassets/map2/ironbox.png)",
+                "x": "canvasWidth / 2",
+                "y": "canvasHeight / 2",
+                "width": "img.width",
+                "height": "img.height",
+                "collide": "outside"
             }
         ]
     }
