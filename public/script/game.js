@@ -119,12 +119,12 @@ function getMapByName(mapName) {
 
 // Parse map data and create game objects
 function parseMap(mapName) {
-    if (!getMapByName(mapName)) {
+    if (!getMapByName(mapName) && !maps[mapName]) {
         console.error(`Map ${mapName} not found`);
         return false;
     }
     
-    const map = getMapByName(mapName);
+    const map = getMapByName(mapName) === null ? maps[mapName] : getMapByName(mapName);
     currentMapData = map;
     
     // Helper function to check if a string is an image path
@@ -905,7 +905,7 @@ export class gameScene extends Scene {
         this.mapsLoaded = true;
         
         // Parse default map
-        if (!parseMap("OG Map")) {
+        if (!parseMap("map1")) {
             commands.globals.reason = "Failed to parse default map. Please try again.";
             commands.switchScene(2);
             return;
