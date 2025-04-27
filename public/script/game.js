@@ -1044,6 +1044,7 @@ export class gameScene extends Scene {
                     // Player is on a dashpad - just enable dash effect
                     dashActive = true;
                     dashTimeRemaining = dashDuration; // Keep refreshing dash duration
+                    dashCooldownRemaining = 0;
                     // Player maintains control over direction
                 } else {
                     // Normal dash mechanics
