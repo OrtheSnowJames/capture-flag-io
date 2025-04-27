@@ -13,7 +13,7 @@
             },
             {
                 "type": "rect",
-                "x": "canvasWidth / 2 - 100", // go behind the flag {cube}{flag}
+                "x": "canvasWidth / 2 - 50", // go behind the flag {cube}{flag}
                 "y": "canvasHeight / 2 - 100",
                 "width": "50",
                 "height": "50",

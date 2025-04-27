@@ -31,6 +31,12 @@ const io = new Server(server, {
     },
 });
 
+function Task(fn) {
+    (async () => {
+        await fn();
+    })();
+}
+
 let lobbyCount = 0;
 const playerWidth = 25;
 const playerHeight = 25;
@@ -280,6 +286,19 @@ class GameServer {
         }
         
         return redScore > blueScore ? "red" : "blue";
+    }
+
+    kickPlayer(playerName) {
+        if (this.game.players[playerName]) {
+            if (this.game.players[playerName].team === "red") {
+                this.reds--;
+            } else {
+                this.blues--;
+            }
+            delete this.game.players[playerName];
+            this.count--;
+            this.emitWithLogging('kill', JSON.stringify({ player: playerName, killer: "system" }));
+        }
     }
 
     emitWithLogging(event, message, log = true) {
@@ -641,6 +660,37 @@ process.stdin.on('data', (input) => {
     } else if (command.trim() === 'clear') {
         console.clear();
         exec('reset');
+    } else if (command.startsWith('kick')) {
+        // ex: kick 1 "bob"
+        const parts = command.split(' ');
+        if (parts.length === 3) {
+            const lobbyNumber = parseInt(parts[1], 10);
+            const playerName = parts[2].replace(/"/g, '');
+            if (!isNaN(lobbyNumber) && lobbyNumber > 0 && lobbyNumber <= lobbies.length) {
+                const lobby = lobbies[lobbyNumber - 1];
+                if (lobby && lobby.server) {
+                    lobby.server.kickPlayer(playerName);
+                }
+            }
+        }
+    } else if (command.startsWith('maintenance')) {
+        // ex: maintenance 1 true
+        const parts = command.split(' ');
+        if (parts.length === 2) {
+            const lobbyNumber = parseInt(parts[1], 10);
+            if (!isNaN(lobbyNumber) && lobbyNumber > 0 && lobbyNumber <= lobbies.length) {
+                const lobby = lobbies[lobbyNumber - 1];
+                if (lobby && lobby.server) {
+                    lobby.server.maintenance = parts[2] === 'true';
+                }
+            } else if (parts[1] === 'all') {
+                lobbies.forEach((lobby) => {
+                    lobby.server.maintenance = parts[2] === 'true';
+                });
+            } else {
+                console.log('Invalid command format. Usage: maintenance <lobby_number> <true|false> | all <true|false>');
+            }
+        }
     } else {
         console.log('Unknown command. Available commands: ');
         console.log('game <lobby_number> - Pretty-prints the GameState of the lobby number.');
@@ -660,5 +710,20 @@ server.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     lobbies.forEach((lobby) => {
         console.log(`Lobby available at ws://localhost:${PORT}${lobby.path}`);
+    });
+});
+
+process.on('SIGINT', () => {
+    console.log('SIGINT signal received. Exiting server...');
+    lobbies.forEach((lobby) => {
+        Object.values(lobby.server.game.players).forEach((player) => {
+            Task(async () => {
+                lobby.server.emitWithLogging('kill', JSON.stringify({ player: player.name, killer: "system" }));
+            });
+        });
+    });
+    server.close(() => {
+        console.log('Server closed.');
+        process.exit(0);
     });
 });
