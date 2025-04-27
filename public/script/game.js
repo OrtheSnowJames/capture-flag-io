@@ -975,6 +975,8 @@ export class gameScene extends Scene {
                 if (this.submitButton.isClicked(commands)) {
                     // Submit message to server
                     if (client) {
+                        this.messageField.deactivate();
+                        this.messageField.text = "";
                         client.emit('message', `${naem} said ${this.messageField.text}`);
                     }
                 }
