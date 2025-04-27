@@ -1394,14 +1394,15 @@ export class gameScene extends Scene {
                     
                     // Draw player name if it exists
                     if (player.name) {
+                        ctx.setTextAlign("center");
                         ctx.drawText(
-                            (player.x + playerWidth / 2) - 20,
-                            player.y - 20,
+                            player.x + playerWidth / 2,
+                            player.y - playerHeight / 2,
                             `${player.name} (${player.score || 0}, ${player.team || ""})`,
                             "white",
                             10
                         );
-                        
+                        ctx.setTextAlign("left");
                         // Draw player message if exists
                         if (playerMessages[player.name]) {
                             const messageBubbleWidth = Math.min(playerMessages[player.name].text.length * 8, 200);
