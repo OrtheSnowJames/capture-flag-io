@@ -325,6 +325,10 @@ function Task(fn) {
 }
 
 function predictMove(x, y, objectsinside = [], objectsoutside = [], mapBounds) {
+    // Get the current player for team check
+    const player = game.players[naem];
+    if (!player) return { w: false, a: false, s: false, d: false };
+    
     const moveDirections = {
         w: true, // up
         a: true, // left
@@ -381,7 +385,7 @@ function predictMove(x, y, objectsinside = [], objectsoutside = [], mapBounds) {
         // Skip further checks if already determined can't move in this direction
         if (!moveDirections[direction]) continue;
         
-        // Check collision with map objects based on their collideType
+        // Check collision with map objects based on their collideType and teamblock properties
         for (const obj of mapObjects) {
             // Skip objects that are already checked in objectsinside or objectsoutside
             const isAlreadyChecked = [...objectsinside, ...objectsoutside].some(checkedObj => 
@@ -393,27 +397,30 @@ function predictMove(x, y, objectsinside = [], objectsoutside = [], mapBounds) {
             
             if (isAlreadyChecked) continue;
             
-            // Handle different collision types
-            if (obj.collideType === 'outside') {
-                // Player must stay outside these objects
-                if (checkCollision(
-                    { x: pos.x, y: pos.y, width: playerWidth, height: playerHeight },
-                    obj
-                )) {
+            // First check if the player is colliding with this object
+            const isColliding = checkCollision(
+                { x: pos.x, y: pos.y, width: playerWidth, height: playerHeight },
+                obj
+            );
+            
+            // If there's a collision, check if it's a teamblock
+            if (isColliding && obj.property && obj.property.teamblock) {
+                // If teamblock doesn't match player's team, block movement
+                if (obj.property.teamblock !== player.team) {
                     moveDirections[direction] = false;
                     break;
                 }
-            } else if (obj.collideType === 'inside') {
-                // Player must stay inside these objects
-                if (!checkCollision(
-                    { x: pos.x, y: pos.y, width: playerWidth, height: playerHeight },
-                    obj
-                )) {
-                    moveDirections[direction] = false;
-                    break;
-                }
+                // If it matches, allow entry regardless of other collision settings
             }
-            // If collideType is null, no collision check needed
+            
+            // Then handle standard collision types
+            if (obj.collideType === 'outside' && isColliding) {
+                moveDirections[direction] = false;
+                break;
+            } else if (obj.collideType === 'inside' && !isColliding) {
+                moveDirections[direction] = false;
+                break;
+            }
         }
     }
     
@@ -421,6 +428,10 @@ function predictMove(x, y, objectsinside = [], objectsoutside = [], mapBounds) {
 }
 
 function canMove(x, y, objectsinside = [], objectsoutside = []) {
+    // Get the current player for team check
+    const player = game.players[naem];
+    if (!player) return false;
+    
     // Check if inside play field bounds
     if (x < 0 || x + playerWidth > field.width || y < 0 || y + playerHeight > field.height) {
         return false;
@@ -446,7 +457,7 @@ function canMove(x, y, objectsinside = [], objectsoutside = []) {
         }
     }
     
-    // Check collision with map objects based on their collideType
+    // Check collision with map objects based on their collideType and teamblock properties
     for (const obj of mapObjects) {
         // Skip objects that are already checked in objectsinside or objectsoutside
         const isAlreadyChecked = [...objectsinside, ...objectsoutside].some(checkedObj => 
@@ -458,25 +469,27 @@ function canMove(x, y, objectsinside = [], objectsoutside = []) {
         
         if (isAlreadyChecked) continue;
         
-        // Handle different collision types
-        if (obj.collideType === 'outside') {
-            // Player must stay outside these objects
-            if (checkCollision(
-                { x: x, y: y, width: playerWidth, height: playerHeight },
-                obj
-            )) {
-                return false; // Collision with 'outside' object - can't move here
+        // First check if the player is colliding with this object
+        const isColliding = checkCollision(
+            { x: x, y: y, width: playerWidth, height: playerHeight },
+            obj
+        );
+        
+        // If there's a collision, check if it's a teamblock
+        if (isColliding && obj.property && obj.property.teamblock) {
+            // If teamblock doesn't match player's team, block movement
+            if (obj.property.teamblock !== player.team) {
+                return false; // Wrong team - can't enter
             }
-        } else if (obj.collideType === 'inside') {
-            // Player must stay inside these objects
-            if (!checkCollision(
-                { x: x, y: y, width: playerWidth, height: playerHeight },
-                obj
-            )) {
-                return false; // Not inside an 'inside' object - can't move here
-            }
+            // If it matches, allow entry regardless of other collision settings
         }
-        // If collideType is null, no collision check needed
+        
+        // Then handle standard collision types
+        if (obj.collideType === 'outside' && isColliding) {
+            return false; // Collision with 'outside' object - can't move here
+        } else if (obj.collideType === 'inside' && !isColliding) {
+            return false; // Not inside an 'inside' object - can't move here
+        }
     }
 
     return true; // Valid position
@@ -972,13 +985,21 @@ export class gameScene extends Scene {
                 this.messageField.update(commands, deltaTime);
                 this.submitButton.update(commands);
 
-                if (this.submitButton.isClicked(commands)) {
+                if (this.submitButton.isClicked(commands) || (commands.keys['Enter'] && this.messageField.isActive)) {
                     // Submit message to server
-                    if (client) {
+                    if (client && this.messageField.text.trim() !== "") {
                         this.messageField.deactivate();
                         client.emit('message', `${naem} said ${this.messageField.text}`);
                         this.messageField.text = "";
                     }
+                }
+                
+                if (commands.keys['Enter'] && !this.messageField.isActive) {
+                    this.messageField.activate();
+                }
+
+                if (commands.keys['Escape'] && this.messageField.isActive) {
+                    this.messageField.deactivate();
                 }
 
                 // Update all map buttons
@@ -1042,10 +1063,6 @@ export class gameScene extends Scene {
                         dashActive = true;
                         dashTimeRemaining = dashDuration;
                         dashCooldownRemaining = dashCooldown;
-                    }
-
-                    if (commands.keys['Enter']) {
-                        window.location.reload();
                     }
                 }
 
