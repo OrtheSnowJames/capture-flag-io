@@ -670,39 +670,80 @@ export class Commands {
         return this.currentSceneIndex;
     }
 }
-function ctxengnloop(scenes, commands, ctx, lastTime, other) {
-    const currentTime = performance.now();
-    const deltaTime = (currentTime - lastTime) / 1000;
-    other.updateCamera(deltaTime); // Smoothly update the camera position
-    const currentScene = scenes[commands.getCurrentSceneIndex()];
-    currentScene.update(deltaTime, commands); // Pass the Commands instance
-    currentScene.draw(other); // Pass the otherCtx instance
-    requestAnimationFrame(() => ctxengnloop(scenes, commands, ctx, currentTime, other));
-}
-export function contextEngine(scenes, initialSceneIndex = 0, canvasWidth = 800, canvasHeight = 600) {
-    // some checkers
-    if (!scenes || scenes.length === 0) {
-        throw new Error('No scenes provided');
+
+// New ContextEngine class
+export class ContextEngine {
+    constructor(scenes, initialSceneIndex = 0, canvasWidth = 800, canvasHeight = 600) {
+        // Validation
+        if (!scenes || scenes.length === 0) {
+            throw new Error('No scenes provided');
+        }
+        if (initialSceneIndex < 0 || initialSceneIndex >= scenes.length) {
+            throw new Error('Invalid initial scene index');
+        }
+        if (typeof canvasWidth !== 'number' || typeof canvasHeight !== 'number') {
+            throw new Error('Canvas width and height must be numbers');
+        }
+
+        this.scenes = scenes;
+        this.initialSceneIndex = initialSceneIndex;
+        this.canvasWidth = canvasWidth;
+        this.canvasHeight = canvasHeight;
+        this.canvas = null;
+        this.ctx = null;
+        this.other = null;
+        this.commands = null;
+        this.isRunning = false;
     }
-    if (initialSceneIndex < 0 || initialSceneIndex >= scenes.length) {
-        throw new Error('Invalid initial scene index');
+
+    initialize() {
+        this.canvas = document.createElement('canvas');
+        this.canvas.width = this.canvasWidth;
+        this.canvas.height = this.canvasHeight;
+        document.body.appendChild(this.canvas);
+        
+        this.ctx = this.canvas.getContext('2d');
+        if (!this.ctx) {
+            throw new Error('Failed to get canvas context');
+        }
+        
+        this.other = new otherCtx(this.ctx);
+        this.commands = new Commands(this.scenes, this.initialSceneIndex);
+        this.commands.bindMouseEvents(this.canvas);
+        this.other.setCamera(0, 0);
+        return this;
     }
-    if (typeof canvasWidth !== 'number' || typeof canvasHeight !== 'number') {
-        throw new Error('Canvas width and height must be numbers');
+
+    start() {
+        if (this.isRunning) return;
+        this.isRunning = true;
+        const startTime = performance.now();
+        this.loop(startTime);
     }
-    const canvas = document.createElement('canvas');
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-    document.body.appendChild(canvas);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-        throw new Error('Failed to get canvas context');
+
+    loop(lastTime) {
+        if (!this.isRunning) return;
+        
+        const currentTime = performance.now();
+        const deltaTime = (currentTime - lastTime) / 1000;
+        
+        this.other.updateCamera(deltaTime);
+        
+        const currentScene = this.scenes[this.commands.getCurrentSceneIndex()];
+        currentScene.update(deltaTime, this.commands);
+        currentScene.draw(this.other);
+        
+        requestAnimationFrame(() => this.loop(currentTime));
     }
-    const other = new otherCtx(ctx);
-    const commands = new Commands(scenes, initialSceneIndex);
-    commands.bindMouseEvents(canvas);
-    other.setCamera(0, 0);
-    const startTime = performance.now();
-    ctxengnloop(scenes, commands, ctx, startTime, other);
+
+    stop() {
+        this.isRunning = false;
+    }
 }
 
+// Keep the original function for legacy support, but use the new class internally
+export function contextEngine(scenes, initialSceneIndex = 0, canvasWidth = 800, canvasHeight = 600) {
+    const engine = new ContextEngine(scenes, initialSceneIndex, canvasWidth, canvasHeight);
+    engine.initialize().start();
+    return engine; // Return the engine instance for advanced usage
+}

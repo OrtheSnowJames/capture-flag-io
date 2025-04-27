@@ -11,6 +11,7 @@ import { timeData, getRandomKeys } from './misc.js';
 import { dirname } from 'path';
 import stripJsonComments from 'strip-json-comments';
 import { json } from 'stream/consumers';
+import { exec } from 'child_process';
 // filepath: /home/james/Documents/capture-flag-io/node/src/index.js
 // Get the directory name of the current module
 const __filename = fileURLToPath(import.meta.url);
@@ -637,6 +638,9 @@ process.stdin.on('data', (input) => {
             console.log('Server closed.');
             process.exit(0);
         });
+    } else if (command.trim() === 'clear') {
+        console.clear();
+        exec('reset');
     } else {
         console.log('Unknown command. Available commands: ');
         console.log('game <lobby_number> - Pretty-prints the GameState of the lobby number.');
