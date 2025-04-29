@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { otherCtx, contextEngine, Commands, Scene, OCtxButton, OCtxTextField } from "./context-engine.mjs";
-import { naem, lobbyPath, timeData, CANVAS_WIDTH, CANVAS_HEIGHT } from "./script.js";
+import { naem, engine, lobbyPath, timeData, CANVAS_WIDTH, CANVAS_HEIGHT } from "./script.js";
 
 // filepath: /home/james/Documents/capture-flag-io/node/public/script/game.js
 
@@ -8,6 +8,7 @@ const PORT = 4566;
 let initialized = false;
 
 let client;
+export let goToDead = true;
 let intermission = false;
 let winners = {"player": "", "team": ""};
 let mapSelection = [];
@@ -23,6 +24,8 @@ const cameraHeight = 400;
 const readableMessages = 7; // num * 30 = how much px is the message box
 const fieldWidth = 1000;
 const fieldHeight = 500;
+const messageBoxHeight = readableMessages * 30;
+const messageBoxWidth = 500;
 
 // Maps 
 let maps = {};
@@ -517,6 +520,7 @@ let sendName = false;
 export class gameScene extends Scene {
     messageField = new OCtxTextField(0, readableMessages * 30, 500, 60, 500/20);
     submitButton = new OCtxButton(520, readableMessages * 30, 100, 60, "Send");
+    backButton = new OCtxButton(50, messageBoxHeight + 70, 100, 60, "Back");
 
     // Replace individual buttons with an array
     mapButtons = [];
@@ -960,6 +964,36 @@ export class gameScene extends Scene {
         }
     }
 
+    resetGame() {
+        game = {
+            players: {},
+            flags: {},
+            messages: [],
+            currentMap: "map1"
+        };
+        if (client) {
+            client.disconnect();
+        }
+        this.timestamp = new timeData(5 * 60);
+        votingActive = false;
+        intermission = false;
+        isOvertime = false;
+        mapSelection = [];
+        mapVotes = {};
+        votedFor = null;
+        dashActive = false;
+        dashCooldownRemaining = 0;
+        dashTimeRemaining = 0;
+        playerMessages = {};
+        lastMovementUpdate = 0;
+        initialized = false;
+        sendName = false;
+        getClient = false;
+        dead = false;
+
+        engine.scenes[1] = new gameScene();
+    }
+
     update(deltaTime, commands) {
         try {
             if (initialized && this.mapsLoaded) {
@@ -984,6 +1018,12 @@ export class gameScene extends Scene {
                 // UI
                 this.messageField.update(commands, deltaTime);
                 this.submitButton.update(commands);
+                this.backButton.update(commands);
+
+                if (this.backButton.isClicked(commands)) {
+                    this.resetGame();
+                    window.location.href = "/";
+                }
 
                 if (this.submitButton.isClicked(commands) || (commands.keys['Enter'] && this.messageField.isActive)) {
                     // Submit message to server
@@ -1195,8 +1235,12 @@ export class gameScene extends Scene {
         } catch (e) {
             // Switch to dead scene and give reasoning
             console.error("Game error:", e);
-            commands.globals.reason = "Client side error, may be death, for nerds: " + e.message;
-            commands.switchScene(2);
+            commands.globals.reason = "Client side error, may be death, for nerds: " + e.message + " " + e.stack;
+            if (goToDead) {
+                commands.switchScene(2);
+            } else {
+                commands.switchScene(0);
+            }
             return;
         }
     }
@@ -1470,8 +1514,7 @@ export class gameScene extends Scene {
             });
 
             // Draw message box
-            const messageBoxHeight = readableMessages * 30;
-            const messageBoxWidth = 500;
+
             ctx.drawRect(
                 0,
                 0,
@@ -1493,6 +1536,7 @@ export class gameScene extends Scene {
             // UI
             this.messageField.draw(ctx, false, false);
             this.submitButton.draw(ctx, false, false);
+            this.backButton.draw(ctx, false, false);
 
             // Draw Timer at the top center with black box
             if (!intermission) {

@@ -144,6 +144,31 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
+app.get('/feedback', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public/feedback.html'));
+});
+
+// Non-game rest apis
+app.get('/api/submit-feedback', (req, res) => {
+    const { feedback } = req.query;
+
+    // Get the feedback file
+    const feedbackFile = path.join(__dirname, 'public/assets/feedback.txt');
+
+    // Append the feedback to the file
+    fs.appendFile(feedbackFile, feedback + '\n ' + new Date().toISOString() + '\n', (err) => {
+        if (err) {
+            console.error('Error appending feedback:', err);
+            return res.status(500).json({ error: 'Failed to submit feedback' });
+        }
+    });
+
+    console.log('Feedback submitted:', feedback);
+
+    res.json({ success: true });
+});
+
+
 // Socket.IO logic (in a class for hopeful scalability)
 class GameServer {
     constructor(namespace, lobbynum) {
@@ -714,7 +739,7 @@ server.listen(PORT, () => {
 });
 
 process.on('SIGINT', () => {
-    console.log('SIGINT signal received. Exiting server...');
+    console.log('SIGINT signal received. Exiting server in 10 seconds...');
     lobbies.forEach((lobby) => {
         Object.values(lobby.server.game.players).forEach((player) => {
             Task(async () => {
@@ -722,8 +747,16 @@ process.on('SIGINT', () => {
             });
         });
     });
+    
+    // Set a timeout to forcefully exit after 10 seconds
+    setTimeout(() => {
+        console.log('Forcefully exiting after 10 seconds...');
+        process.exit(0);
+    }, 10000);
+
+    // Try to close the server gracefully
     server.close(() => {
-        console.log('Server closed.');
+        console.log('Server closed gracefully.');
         process.exit(0);
     });
 });

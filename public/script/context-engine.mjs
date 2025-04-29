@@ -174,23 +174,23 @@ export class otherCtx {
         ];
         this.drawPolygon(points, color, cameraPos, cameraZoom);
     }
+    setTextAlign(align = "left") {
+        this.ctx.textAlign = align;
+    }
 }
 otherCtx.prototype.setTextAlign = function (align = "left") {
-    this.ctx.textAlign = align;          // new helper
+    this.ctx.textAlign = align;
 };
 export class Scene {
     async onLoad(commands) {
         // Override this method in scenes to handle asynchronous initialization when the scene starts
     }
-
     async onExit(commands) {
         // Override this method in scenes to handle asynchronous cleanup when the scene is exited
     }
-
     update(deltaTime, commands) {
         // Override this method in scenes
     }
-
     draw(ctx) {
         // Override this method in scenes
     }
@@ -245,17 +245,10 @@ export class OCtxButton {
         const mouseY = commands.mouseY;
         this.isHovered = this.pointInRect(mouseX, mouseY);
         this.isPressed = this.isHovered && commands.mouseDown;
-        if (this.isPressed) {
-            navigator.virtualKeyboard.show();
-        }
-        else {
-            navigator.virtualKeyboard.hide();
-        }
         // Reset wasClicked flag when mouse is pressed down
         if (commands.mouseDown) {
             this.wasClicked = false;
         }
-        
         let targetProgress = 0.0;
         if (this.isPressed)
             targetProgress = 1.0;
@@ -304,15 +297,7 @@ export class OCtxButton {
         }
         const textColor = this.enabled ? this.textColor : this.adjustAlpha(this.textColor, 0.5);
         ctx.setTextAlign("center");
-        ctx.drawText(
-            this.bounds.x + this.bounds.width / 2,
-            this.bounds.y + this.bounds.height / 2 + this.fontSize / 3,
-            this.label,
-            textColor,
-            this.fontSize,
-            cameraPos,
-            cameraZoom
-        );
+        ctx.drawText(this.bounds.x + this.bounds.width / 2, this.bounds.y + this.bounds.height / 2 + this.fontSize / 3, this.label, textColor, this.fontSize, cameraPos, cameraZoom);
         ctx.setTextAlign("left");
     }
     isClicked(commands) {
@@ -329,24 +314,12 @@ export class OCtxButton {
     }
     drawRoundedRect(ctx, x, y, w, h, r, color, cameraPos = true, cameraZoom = true) {
         const zoom = cameraZoom ? ctx.zoom : 1;
-        const points = this.getRoundedRectPoints(
-            cameraPos ? (x - ctx.cameraX) * zoom : x,
-            cameraPos ? (y - ctx.cameraY) * zoom : y,
-            w * zoom,
-            h * zoom,
-            r * zoom
-        );
+        const points = this.getRoundedRectPoints(cameraPos ? (x - ctx.cameraX) * zoom : x, cameraPos ? (y - ctx.cameraY) * zoom : y, w * zoom, h * zoom, r * zoom);
         ctx.drawPolygon(points, color, cameraPos, cameraZoom);
     }
     drawRoundedRectBorder(ctx, x, y, w, h, r, color, thickness, cameraPos = true, cameraZoom = true) {
         const zoom = cameraZoom ? ctx.zoom : 1;
-        const points = this.getRoundedRectPoints(
-            cameraPos ? (x - ctx.cameraX) * zoom : x,
-            cameraPos ? (y - ctx.cameraY) * zoom : y,
-            w * zoom,
-            h * zoom,
-            r * zoom
-        );
+        const points = this.getRoundedRectPoints(cameraPos ? (x - ctx.cameraX) * zoom : x, cameraPos ? (y - ctx.cameraY) * zoom : y, w * zoom, h * zoom, r * zoom);
         for (let i = 0; i < points.length; i++) {
             const p1 = points[i];
             const p2 = points[(i + 1) % points.length];
@@ -453,36 +426,34 @@ export class OCtxTextField {
     isUneditable() {
         return this.uneditable;
     }
-    
     async handlePaste() {
         try {
             // Get text from clipboard
             const clipboardText = await navigator.clipboard.readText();
-            
             if (clipboardText && this.text.length + clipboardText.length <= this.maxLength) {
                 // Insert clipboard text at cursor position
-                this.text = this.text.slice(0, this.cursorPosition) + 
-                            clipboardText + 
-                            this.text.slice(this.cursorPosition);
-                            
+                this.text = this.text.slice(0, this.cursorPosition) +
+                    clipboardText +
+                    this.text.slice(this.cursorPosition);
                 // Update cursor position
                 this.cursorPosition += clipboardText.length;
-            } else if (clipboardText) {
+            }
+            else if (clipboardText) {
                 // If text would exceed max length, insert as much as possible.
                 const availableSpace = this.maxLength - this.text.length;
                 if (availableSpace > 0) {
                     const truncatedPaste = clipboardText.substring(0, availableSpace);
-                    this.text = this.text.slice(0, this.cursorPosition) + 
-                                truncatedPaste + 
-                                this.text.slice(this.cursorPosition);
+                    this.text = this.text.slice(0, this.cursorPosition) +
+                        truncatedPaste +
+                        this.text.slice(this.cursorPosition);
                     this.cursorPosition += truncatedPaste.length;
                 }
             }
-        } catch (error) {
+        }
+        catch (error) {
             console.error("Failed to read clipboard contents:", error);
         }
     }
-    
     update(commands, deltaTime) {
         if (this.uneditable)
             return;
@@ -496,10 +467,9 @@ export class OCtxTextField {
         if (this.isActive) {
             // Handle Ctrl+V for paste
             if (commands.keys['v'] && (commands.keys['Control'] || commands.keys['Meta'])) {
-                (async () => {this.handlePaste();})();
+                (async () => { this.handlePaste(); })();
                 commands.keys['v'] = false; // Consume the key
             }
-            
             // Handle character input
             for (const key in commands.keys) {
                 if (commands.keys[key] && key.length === 1) {
@@ -514,13 +484,14 @@ export class OCtxTextField {
             if (commands.keys["Backspace"]) {
                 this.backspaceHoldTimer += deltaTime;
                 const firstPress = this.backspaceHoldTimer === deltaTime;
-                const repeating  = this.backspaceHoldTimer > 0.5 &&            // start repeat
-                                   (this.backspaceHoldTimer % 0.05) < deltaTime; // 20 Hz
+                const repeating = this.backspaceHoldTimer > 0.5 && // start repeat
+                    (this.backspaceHoldTimer % 0.05) < deltaTime; // 20 Hz
                 if ((firstPress || repeating) && this.cursorPosition > 0) {
                     this.text = this.text.slice(0, this.cursorPosition - 1) + this.text.slice(this.cursorPosition);
                     this.cursorPosition--;
                 }
-            } else {
+            }
+            else {
                 this.backspaceHoldTimer = 0;
             }
             if (commands.keys["ArrowLeft"]) {
@@ -662,7 +633,8 @@ export class Commands {
                 this.currentSceneIndex = index;
                 await this.scenes[index].onLoad(this); // Call onLoad for the new scene
             })();
-        } else {
+        }
+        else {
             console.error(`Invalid scene index: ${index}`);
         }
     }
@@ -670,9 +642,17 @@ export class Commands {
         return this.currentSceneIndex;
     }
 }
-
 // New ContextEngine class
 export class ContextEngine {
+    scenes;
+    initialSceneIndex;
+    canvasWidth;
+    canvasHeight;
+    canvas = null;
+    ctx = null;
+    other = null;
+    commands = null;
+    isRunning = false;
     constructor(scenes, initialSceneIndex = 0, canvasWidth = 800, canvasHeight = 600) {
         // Validation
         if (!scenes || scenes.length === 0) {
@@ -684,63 +664,48 @@ export class ContextEngine {
         if (typeof canvasWidth !== 'number' || typeof canvasHeight !== 'number') {
             throw new Error('Canvas width and height must be numbers');
         }
-
         this.scenes = scenes;
         this.initialSceneIndex = initialSceneIndex;
         this.canvasWidth = canvasWidth;
         this.canvasHeight = canvasHeight;
-        this.canvas = null;
-        this.ctx = null;
-        this.other = null;
-        this.commands = null;
-        this.isRunning = false;
     }
-
     initialize() {
         this.canvas = document.createElement('canvas');
         this.canvas.width = this.canvasWidth;
         this.canvas.height = this.canvasHeight;
         document.body.appendChild(this.canvas);
-        
         this.ctx = this.canvas.getContext('2d');
         if (!this.ctx) {
             throw new Error('Failed to get canvas context');
         }
-        
         this.other = new otherCtx(this.ctx);
         this.commands = new Commands(this.scenes, this.initialSceneIndex);
         this.commands.bindMouseEvents(this.canvas);
         this.other.setCamera(0, 0);
         return this;
     }
-
     start() {
-        if (this.isRunning) return;
+        if (this.isRunning)
+            return;
         this.isRunning = true;
         const startTime = performance.now();
         this.loop(startTime);
     }
-
     loop(lastTime) {
-        if (!this.isRunning) return;
-        
+        if (!this.isRunning || !this.other || !this.commands)
+            return;
         const currentTime = performance.now();
         const deltaTime = (currentTime - lastTime) / 1000;
-        
         this.other.updateCamera(deltaTime);
-        
         const currentScene = this.scenes[this.commands.getCurrentSceneIndex()];
         currentScene.update(deltaTime, this.commands);
         currentScene.draw(this.other);
-        
         requestAnimationFrame(() => this.loop(currentTime));
     }
-
     stop() {
         this.isRunning = false;
     }
 }
-
 // Keep the original function for legacy support, but use the new class internally
 export function contextEngine(scenes, initialSceneIndex = 0, canvasWidth = 800, canvasHeight = 600) {
     const engine = new ContextEngine(scenes, initialSceneIndex, canvasWidth, canvasHeight);

@@ -50,10 +50,27 @@
             color: rgba(255, 255, 255, 0.7);
         }
 
-        .github-button {
+        .header-buttons {
             position: absolute;
             top: 10px;
             left: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .button-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .button-label {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .github-button, .feedback-button {
             background-color: #ff5722;
             color: #fff;
             padding: 0.5rem 1rem;
@@ -68,15 +85,26 @@
             transition: background-color 0.3s ease;
         }
 
-        .github-button:hover {
+        .github-button:hover, .feedback-button:hover {
             background-color: #e64a19;
         }
     </style>
 </head>
 <body>
-    <a href="https://github.com/OrtheSnowJames/capture-flag-io" class="github-button" target="_blank" rel="noopener noreferrer">
-        &lt;/&gt;
-    </a>
+    <div class="header-buttons">
+        <div class="button-container">
+            <a href="https://github.com/OrtheSnowJames/capture-flag-io" class="github-button" target="_blank" rel="noopener noreferrer">
+                &lt;/&gt;
+            </a>
+            <span class="button-label">code</span>
+        </div>
+        <div class="button-container">
+            <a href="feedback.html" class="feedback-button">
+                💬
+            </a>
+            <span class="button-label">feedback</span>
+        </div>
+    </div>
     <div style="font-size: 5rem;">🚩</div>
     <h1>Capture the Flag</h1>
     <p>Capture the flag to win!</p>

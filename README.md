@@ -8,8 +8,7 @@ This game is built using my custom TypeScript game engine. While there are many 
 
 ### Design Philosophy
 - Minimalist cubic player designs (intentional!)
-- My Dream-inspired gameplay elements
-- No-budget, all passion
+- Whatever I think goes into the game
 
 ## Installation
 
@@ -46,7 +45,6 @@ firefox http://localhost:4566
 ```
 
 ## Future Plans
-- HTTPS implementation for live deployment
 - Stripe integration
 - Supporter cosmetics (like a special in-game shirt for $0.95)
 - Publishing context-engine as an npm package

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { otherCtx, contextEngine, Commands, Scene, OCtxButton, OCtxTextField } from "./context-engine.mjs";
-import { gameScene, deadScene } from "./game.js";
+import { gameScene, deadScene, goToDead } from "./game.js";
 
 // filepath: /home/james/Documents/capture-flag-io/node/public/script/script.js
 
@@ -8,7 +8,7 @@ export let naem = ""; // Exported variable to hold the player's name
 export let lobbyPath = ""; // Exported variable to hold the lobby path
 let switched = false;
 let tips = [];
-
+export let engine = null;
 // Load tips asynchronously
 fetch("/assets/loadingScreenTips.json")
   .then(response => response.json())
@@ -45,7 +45,9 @@ class menuScene extends Scene {
         this.init();
     }
 
-    async onLoad(commands) {}
+    async onLoad(commands) {
+      goToDead = true;
+    }
 
     init() {
         const buttonWidthRatio = 0.25; // 25% of canvas width
@@ -73,6 +75,14 @@ class menuScene extends Scene {
             nameFieldHeight,
             20
         );
+
+        this.backButton = new OCtxButton(
+            50, 50,
+            buttonWidth,
+            buttonHeight,
+            "Back"
+        );
+
         this.nameField.setPlaceholder("Enter your name");
     }
 
@@ -82,6 +92,11 @@ class menuScene extends Scene {
   
       this.startButton.update(commands);
       this.nameField.update(commands, dt);
+      this.backButton.update(commands);
+
+      if (this.backButton.isClicked(commands)) {
+        window.location.href = "/";
+      }
   
       if (!this.startButton.isClicked(commands)) return;
   
@@ -128,6 +143,7 @@ class menuScene extends Scene {
         ctx.drawImage(coverart, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         this.startButton.draw(ctx);
         this.nameField.draw(ctx);
+        this.backButton.draw(ctx);
         ctx.drawText(
             CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166, // 16.6% of canvas width offset 
             CANVAS_HEIGHT * 0.2, // 10% of canvas height from the top
@@ -260,4 +276,4 @@ let deadSceneObj = new deadScene();
 
 let game = [menuSceneObj, gameSceneObj, deadSceneObj];
 
-contextEngine(game, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // call the engine
+engine = contextEngine(game, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // call the engine
