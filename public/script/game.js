@@ -518,7 +518,7 @@ let game = {
 let getClient = false;
 let sendName = false; 
 export class gameScene extends Scene {
-    messageField = new OCtxTextField(0, readableMessages * 30, 500, 60, 500/20);
+    messageField = new OCtxTextField(0, readableMessages * 30, 500, 60, Math.round(500/20));
     submitButton = new OCtxButton(520, readableMessages * 30, 100, 60, "Send");
     backButton = new OCtxButton(50, messageBoxHeight + 70, 100, 60, "Back");
 

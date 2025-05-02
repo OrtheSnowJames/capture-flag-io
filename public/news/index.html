@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News - Capture the Flag</title>
+    <style>
+        :root {
+            --primary-color: #ff5722;
+            --primary-hover: #e64a19;
+            --background-gradient: linear-gradient(135deg, #1e3c72, #2a5298);
+            --container-bg: rgba(0, 0, 0, 0.7);
+            --text-color: #fff;
+            --border-radius: 0.625rem;
+            --spacing-unit: 1rem;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: var(--background-gradient);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: var(--spacing-unit);
+        }
+
+        .back-button {
+            position: absolute;
+            top: calc(var(--spacing-unit) * 1.25);
+            left: calc(var(--spacing-unit) * 1.25);
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            padding: calc(var(--spacing-unit) * 0.5) var(--spacing-unit);
+            font-size: 1rem;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+        }
+
+        .back-button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .news-container {
+            width: 90%;
+            max-width: 60rem;
+            margin-top: calc(var(--spacing-unit) * 4);
+        }
+
+        .news-post {
+            background-color: var(--container-bg);
+            padding: calc(var(--spacing-unit) * 2);
+            border-radius: var(--border-radius);
+            margin-bottom: var(--spacing-unit);
+            box-shadow: 0 0 1.25rem rgba(0, 0, 0, 0.3);
+        }
+
+        .news-post h2 {
+            color: var(--primary-color);
+            margin-top: 0;
+        }
+
+        .news-post .date {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+            margin-bottom: var(--spacing-unit);
+        }
+
+        .news-post .preview {
+            margin-bottom: var(--spacing-unit);
+            line-height: 1.6;
+        }
+
+        .view-more {
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            padding: calc(var(--spacing-unit) * 0.5) var(--spacing-unit);
+            font-size: 1rem;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.3s ease;
+        }
+
+        .view-more:hover {
+            background-color: var(--primary-hover);
+        }
+
+        @media (max-width: 48rem) {
+            .news-container {
+                width: 95%;
+            }
+
+            .news-post {
+                padding: var(--spacing-unit);
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="../index.html" class="back-button">← Back to Game</a>
+    
+    <div class="news-container">
+        <div class="news-post">
+            <h2>Game Launch Announcement</h2>
+            <div class="date">March 15, 2024</div>
+            <div class="preview">
+                We're excited to announce the launch of Capture the Flag! Join us in this thrilling multiplayer game where strategy and quick thinking are your best allies...
+            </div>
+            <a href="post-game-launch.html" class="view-more">View More</a>
+        </div>
+
+        <div class="news-post">
+            <h2>New Features Coming Soon</h2>
+            <div class="date">March 14, 2024</div>
+            <div class="preview">
+                Get ready for an exciting update! We're working on new features including custom maps, power-ups, and team modes...
+            </div>
+            <a href="post-new-features.html" class="view-more">View More</a>
+        </div>
+
+        <div class="news-post">
+            <h2>Community Spotlight</h2>
+            <div class="date">March 13, 2024</div>
+            <div class="preview">
+                Meet our amazing community members and discover their strategies for capturing flags. This week we're featuring some incredible gameplay moments...
+            </div>
+            <a href="post-community-spotlight.html" class="view-more">View More</a>
+        </div>
+    </div>
+</body>
+</html>
