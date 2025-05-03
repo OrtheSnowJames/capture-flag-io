@@ -929,6 +929,7 @@ export class gameScene extends Scene {
     }
 
     async onLoad(commands) {
+        newMusicPlay = musicPlay
         // Load maps first
         if (!await loadMaps()) {
             commands.globals.reason = "Failed to load maps. Please try again.";
@@ -1462,6 +1463,9 @@ export class gameScene extends Scene {
             // Add support for other object types as needed
         });
 
+        // Draw lobby path in bottom left
+        ctx.drawText(10, CANVAS_HEIGHT - 30, `Lobby: ${lobbyPath}`, "white", 16, false, false);
+
         // Draw flags if they exist
         if (game.flags) {
             Object.values(game.flags).forEach(flag => {
@@ -1492,7 +1496,9 @@ export class gameScene extends Scene {
                     typeof player.x !== 'undefined' && 
                     typeof player.y !== 'undefined' && 
                     player.color) {
-                    ctx.drawRect(player.x, player.y, playerWidth, playerHeight, player.color);
+                    // Check if player is op and use yellow color if they are
+                    const playerColor = player.isOp ? "yellow" : player.color;
+                    ctx.drawRect(player.x, player.y, playerWidth, playerHeight, playerColor);
                     
                     // Draw player name if it exists
                     if (player.name) {

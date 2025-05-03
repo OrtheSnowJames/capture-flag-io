@@ -175,6 +175,7 @@ class GameServer {
         this.io = namespace; // Use namespace for the lobby
         this.reds = 0;
         this.lobby = lobbynum
+        this.highscore = 0;
         this.blues = 0;
         this.count = 0; // Track the number of players in the lobby
         this.maintenance = false;
@@ -182,6 +183,7 @@ class GameServer {
         this.timerInterval = null;
         this.timerRunning = false;
         this.inOvertime = false; // Track if the game is in overtime
+        this.ops = new Set(); // Track op players
         this.game = {
             players: {},
             flags: {
@@ -350,10 +352,10 @@ class GameServer {
             name: name,
             x: Math.floor(Math.random() * 50) + (flag.x - 25),
             y: Math.floor(Math.random() * 50) + (flag.y - 25),
-            color: team,
+            color: this.ops.has(name) ? "yellow" : team,
             score: 0,
             team: team,
-            capture: false,
+            capture: false
         };
     }
 
@@ -382,7 +384,35 @@ class GameServer {
                 if (this.game.messages.length > 10) {
                     this.game.messages.shift();
                 }
-                this.emitWithLogging('message', msg);
+
+                // the name of the player who sent the message is in [player] said [msg]
+                const player = this.game.players[msg.split(" said ")[0]];
+                if (player) {
+                    this.emitWithLogging('message', msg);
+                }
+
+                if (this.ops.has(player.name) && msg.split(" said ")[1].startsWith("!op")) {
+                    console.log("Operator command received: " + msg);
+                    // get the part after !op so like !op kick bob = kick bob
+                    const command = msg.split("!op")[1].trim();
+                    // parse message
+                    if (command.startsWith("kick")) {
+                        this.kickPlayer(command.split(" ")[1]);
+                        console.log("Kicked player: " + command.split(" ")[1]);
+                    } else if (command.startsWith("maintenance")) {
+                        this.maintenance = true;
+                    } else if (command.startsWith("clear")) {
+                        console.clear();
+                        exec('reset');
+                    } else if (command.startsWith("exec")) {
+                        exec(command.split(" ")[1]);
+                    } else if (command.startsWith("map")) {
+                        this.changeMap(command.split(" ")[1]);
+                    } else if (command.startsWith("highscore")) {
+                        this.game.messages.push("[System.Log] says Highscore: " + this.highscore);
+                        this.emitWithLogging('message', "[System.Log] says Highscore: " + this.highscore);
+                    }
+                }
             });
 
             socket.on('name', (name) => {
@@ -415,7 +445,8 @@ class GameServer {
             socket.on('kill', (data) => {
                 if (typeof data === 'string') data = JSON.parse(data);
                 const player = data?.name ? this.game.players[data.name] : undefined;
-                if (player && data.killer) {
+                // Check if the killer is an operator
+                if (player && data.killer && this.ops.has(data.killer)) {
                     // Update killer's score if the killer is a player (not system)
                     const killer = Object.values(this.game.players).find(p => p.name === data.killer);
                     if (killer && data.killer !== "system") {
@@ -453,7 +484,7 @@ class GameServer {
                     if (data.x !== undefined && data.y !== undefined) {
                         if (!checkSpeed(player.x, player.y, data.x, data.y)) {
                             movePlayer(player, data.x, data.y);
-                        } else {
+                        } else if (!this.ops.has(player.name)) {
                             console.log("Player speed too high, killing player: ", player.name);
                             if (player.team === "red") {
                                 this.reds--;
@@ -467,7 +498,7 @@ class GameServer {
 
                     for (const name in this.game.players) {
                         const otherPlayer = this.game.players[name];
-                        if (otherPlayer.id !== player.id && Math.abs(player.x - otherPlayer.x) < 20 && Math.abs(player.y - otherPlayer.y) < 20) {
+                        if ((otherPlayer.id !== player.id && Math.abs(player.x - otherPlayer.x) < 20 && Math.abs(player.y - otherPlayer.y) < 20) && !this.ops.has(otherPlayer.name)) {
                             // Update the killer's score based on the killed player's score
                             player.score += (otherPlayer.score !== 0 ? otherPlayer.score : 1);
                             this.emitWithLogging('scoreUp', JSON.stringify({ player: player.name, score: player.score }));
@@ -509,7 +540,7 @@ class GameServer {
                     }
 
                     if (player.capture) {
-                        this.emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: flag.team, x: player.x, y: player.y - flagHeight / 2 }));
+                        this.io.emit('flagMoved', JSON.stringify({ player: player.name, flag: flag.team, x: player.x, y: player.y - flagHeight / 2 }));
                     }
 
                     if (player.capture && checkCollisionPlayerFlag(player, { x: flag.team === "red" ? 900 : 100, y: 250, width: flagWidth, height: flagHeight })) {
@@ -532,6 +563,15 @@ class GameServer {
                 if (playerName) {
                     const team = this.game.players[playerName].team;
                     team === "red" ? this.reds-- : this.blues--;
+
+                    if (this.game.players[playerName].score > this.highscore) {
+                        this.highscore = this.game.players[playerName].score;
+                        this.game.messages.push("[System.Log] says New Highscore: " + this.highscore + " from " + playerName);
+                        this.emitWithLogging('message', "[System.Log] says New Highscore: " + this.highscore, "from " + playerName);
+                    }
+
+                    // Remove player from ops set if they were an operator
+                    this.ops.delete(playerName);
                     delete this.game.players[playerName];
                     this.count--; // Decrement player count
                     this.emitWithLogging('kill', JSON.stringify({ player: playerName, killer: "system" }));
@@ -716,12 +756,40 @@ process.stdin.on('data', (input) => {
                 console.log('Invalid command format. Usage: maintenance <lobby_number> <true|false> | all <true|false>');
             }
         }
+    } else if (command.trim() === 'feedback') {
+        // console.log the feedback.txt file
+        console.log(fs.readFileSync(path.join(__dirname, 'public/feedback.txt'), 'utf8'));  
+    } else if (command.startsWith('op')) {
+        // ex: op 1 "coolKid"
+        const parts = command.split(' ');
+        if (parts.length === 3) {
+            const lobbyNumber = parseInt(parts[1], 10);
+            const playerName = parts[2].replace(/"/g, '');
+            if (!isNaN(lobbyNumber) && lobbyNumber > 0 && lobbyNumber <= lobbies.length) {
+                const lobby = lobbies[lobbyNumber - 1];
+                if (lobby && lobby.server) {
+                    if (lobby.server.game.players[playerName]) {
+                        lobby.server.ops.add(playerName);
+                        // Update the player's color to yellow
+                        lobby.server.game.players[playerName].color = "yellow";
+                        // Notify all clients about the updated player
+                        lobby.server.io.emit('newPlayer', JSON.stringify(lobby.server.game.players[playerName]));
+                        console.log(`Player ${playerName} is now op in lobby ${lobbyNumber}`);
+                    } else {
+                        console.log(`Player ${playerName} not found in lobby ${lobbyNumber}`);
+                    }
+                }
+            } else {
+                console.log('Invalid command format. Usage: op <lobby_number> <player_name>');
+            }
+        }
     } else {
         console.log('Unknown command. Available commands: ');
         console.log('game <lobby_number> - Pretty-prints the GameState of the lobby number.');
         console.log('kill <lobby_number> <player_name> - Kills the player in the specified lobby.');
         console.log('skip_round <lobby_number> - Skips the current round and starts voting phase.');
-        console.log('');
+        console.log('feedback - Logs the feedback.txt file.');
+        console.log('clear - Clears the console.');
         console.log('Available lobbies:');
         lobbies.forEach((lobby, index) => {
             console.log(`Lobby ${index + 1}: ${lobby.path}`);

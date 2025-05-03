@@ -4,8 +4,8 @@ import { gameScene, deadScene, goToDead } from "./game.js";
 
 // filepath: /home/james/Documents/capture-flag-io/node/public/script/script.js
 
-export let naem = ""; // Exported variable to hold the player's name
-export let lobbyPath = ""; // Exported variable to hold the lobby path
+export let naem = "";
+export let lobbyPath = "";
 let switched = false;
 let tips = [];
 export let engine = null;
@@ -23,7 +23,7 @@ setTimeout(() => {
   randomTip = tips.length > 0 ? 
   tips[Math.floor(Math.random() * tips.length)] : 
   "Pro tip: Wait for tips to load!";
-}, 1000);
+}, 300);
 
 export const CANVAS_WIDTH = 1600;
 export const CANVAS_HEIGHT = 800;
@@ -35,7 +35,9 @@ coverart.src = "/assets/coverart.png";
 
 let titleMusic = new Audio("/assets/music/evansong2.wav");
 titleMusic.loop = true;
-titleMusic.play();
+if (musicPlay) {
+  titleMusic.play();
+}
 
 function namefieldPlaceholderError(error, namefield) {
     namefield.deactivate();
