@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music - Capture the Flag</title>
+    <style>
+        :root {
+            --primary-color: #ff5722;
+            --primary-hover: #e64a19;
+            --background-gradient: linear-gradient(135deg, #1e3c72, #2a5298);
+            --container-bg: rgba(0, 0, 0, 0.7);
+            --text-color: #fff;
+            --border-radius: 0.625rem;
+            --spacing-unit: 1rem;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: var(--background-gradient);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: var(--spacing-unit);
+        }
+
+        .back-button {
+            position: absolute;
+            top: calc(var(--spacing-unit) * 1.25);
+            left: calc(var(--spacing-unit) * 1.25);
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            padding: calc(var(--spacing-unit) * 0.5) var(--spacing-unit);
+            font-size: 1rem;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+        }
+
+        .back-button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .soundtrack-container {
+            width: 90%;
+            max-width: 60rem;
+            margin-top: calc(var(--spacing-unit) * 4);
+        }
+
+        .soundtrack-item {
+            background-color: var(--container-bg);
+            padding: calc(var(--spacing-unit) * 2);
+            border-radius: var(--border-radius);
+            margin-bottom: var(--spacing-unit);
+            box-shadow: 0 0 1.25rem rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .soundtrack-info {
+            flex-grow: 1;
+        }
+
+        .soundtrack-title {
+            color: var(--primary-color);
+            margin: 0;
+            font-size: 1.5rem;
+            cursor: pointer;
+            display: inline-block;
+            text-decoration: none;
+            transition: color 0.3s ease;
+            font-weight: bold;
+        }
+
+        .soundtrack-title:hover {
+            color: var(--primary-hover);
+        }
+
+        .soundtrack-artist {
+            color: rgba(255, 255, 255, 0.7);
+            margin: 0.5rem 0;
+        }
+
+        .soundtrack-description {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.95rem;
+            line-height: 1.5;
+            margin: 1rem 0;
+            padding: 1rem;
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: var(--border-radius);
+            border-left: 3px solid var(--primary-color);
+        }
+
+        .playback-controls {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-unit);
+            margin-top: var(--spacing-unit);
+        }
+
+        .progress-bar {
+            flex-grow: 1;
+            height: 4px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background-color: var(--primary-color);
+            border-radius: 2px;
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        .time-display {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+            min-width: 100px;
+            text-align: right;
+        }
+
+        .play-button {
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            padding: calc(var(--spacing-unit) * 0.5) var(--spacing-unit);
+            font-size: 1rem;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin-left: var(--spacing-unit);
+        }
+
+        .play-button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .play-button.playing {
+            background-color: var(--primary-hover);
+        }
+
+        @media (max-width: 48rem) {
+            .soundtrack-container {
+                width: 95%;
+            }
+
+            .soundtrack-item {
+                padding: var(--spacing-unit);
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .play-button {
+                margin: var(--spacing-unit) 0 0 0;
+            }
+
+            .playback-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .time-display {
+                text-align: center;
+                margin-top: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-button">← Back to Game</a>
+    
+    <div class="soundtrack-container">
+        <div class="soundtrack-item">
+            <div class="soundtrack-info">
+                <a href="/assets/music/evansong1.wav" download class="soundtrack-title">Sum Battle Song</a>
+                <p class="soundtrack-artist">by <a href="https://www.youtube.com/@LuckyEv_Real" style="color: var(--primary-color); text-decoration: none;">LuckyEv</a></p>
+                <div class="soundtrack-description">
+                    Evan's 41st song. Not on YouTube. Fills you with determination.
+                </div>
+                <div class="playback-controls">
+                    <div class="progress-bar" onclick="seekAudio(event)">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
+                </div>
+            </div>
+            <button class="play-button" onclick="togglePlay(this)">Play</button>
+        </div>
+
+        <div class="soundtrack-item">
+            <div class="soundtrack-info">
+                <a href="/assets/music/evansong2.wav" download class="soundtrack-title">Bossa Nova (for a summer day) - Title Screen</a>
+                <p class="soundtrack-artist">by <a href="https://www.youtube.com/@LuckyEv_Real" style="color: var(--primary-color); text-decoration: none;">LuckyEv</a></p>
+                <div class="soundtrack-description">
+                    Evan's 42nd song. Not on YouTube. Relaxing.
+                </div>
+                <div class="playback-controls">
+                    <div class="progress-bar" onclick="seekAudio(event)">
+                        <div class="progress-fill" id="progressFill2"></div>
+                    </div>
+                    <span class="time-display" id="timeDisplay2">0:00 / 0:00</span>
+                </div>
+            </div>
+            <button class="play-button" onclick="togglePlay(this)">Play</button>
+        </div>
+    </div>
+
+    <script>
+        let currentAudio = null;
+        let currentButton = null;
+        let progressInterval = null;
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+            return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+        function updateProgress() {
+            if (currentAudio) {
+                const progress = (currentAudio.currentTime / currentAudio.duration) * 100;
+                const progressFillId = currentButton.parentElement.querySelector('.progress-fill').id;
+                const timeDisplayId = currentButton.parentElement.querySelector('.time-display').id;
+                document.getElementById(progressFillId).style.width = `${progress}%`;
+                document.getElementById(timeDisplayId).textContent = 
+                    `${formatTime(currentAudio.currentTime)} / ${formatTime(currentAudio.duration)}`;
+            }
+        }
+
+        function seekAudio(event) {
+            if (!currentAudio) return;
+            
+            const progressBar = event.currentTarget;
+            const rect = progressBar.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const percentage = x / rect.width;
+            
+            currentAudio.currentTime = currentAudio.duration * percentage;
+            updateProgress();
+        }
+
+        function togglePlay(button) {
+            if (currentAudio && currentButton !== button) {
+                // Stop previous audio and reset its button
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+                currentButton.textContent = 'Play';
+                currentButton.classList.remove('playing');
+                clearInterval(progressInterval);
+                const prevProgressFillId = currentButton.parentElement.querySelector('.progress-fill').id;
+                const prevTimeDisplayId = currentButton.parentElement.querySelector('.time-display').id;
+                document.getElementById(prevProgressFillId).style.width = '0%';
+                document.getElementById(prevTimeDisplayId).textContent = '0:00 / 0:00';
+            }
+
+            if (currentButton === button && currentAudio) {
+                // Toggle current audio
+                if (currentAudio.paused) {
+                    currentAudio.play();
+                    button.textContent = 'Pause';
+                    button.classList.add('playing');
+                    progressInterval = setInterval(updateProgress, 100);
+                } else {
+                    currentAudio.pause();
+                    button.textContent = 'Play';
+                    button.classList.remove('playing');
+                    clearInterval(progressInterval);
+                }
+            } else {
+                // Start new audio
+                const audioPath = button.parentElement.querySelector('.soundtrack-title').textContent === 'Sum Battle Song' 
+                    ? '/assets/music/evansong1.wav'
+                    : '/assets/music/evansong2.wav';
+                currentAudio = new Audio(audioPath);
+                currentAudio.play();
+                button.textContent = 'Pause';
+                button.classList.add('playing');
+                currentButton = button;
+                progressInterval = setInterval(updateProgress, 100);
+
+                // Handle audio end
+                currentAudio.onended = function() {
+                    button.textContent = 'Play';
+                    button.classList.remove('playing');
+                    currentAudio = null;
+                    currentButton = null;
+                    clearInterval(progressInterval);
+                    const progressFillId = button.parentElement.querySelector('.progress-fill').id;
+                    const timeDisplayId = button.parentElement.querySelector('.time-display').id;
+                    document.getElementById(progressFillId).style.width = '0%';
+                    document.getElementById(timeDisplayId).textContent = '0:00 / 0:00';
+                };
+
+                // Update time display when metadata is loaded
+                currentAudio.onloadedmetadata = function() {
+                    const timeDisplayId = button.parentElement.querySelector('.time-display').id;
+                    document.getElementById(timeDisplayId).textContent = 
+                        `0:00 / ${formatTime(currentAudio.duration)}`;
+                };
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Community Spotlight - Capture the Flag News</title>
+    <style>
+        :root {
+            --primary-color: #ff5722;
+            --primary-hover: #e64a19;
+            --background-gradient: linear-gradient(135deg, #1e3c72, #2a5298);
+            --container-bg: rgba(0, 0, 0, 0.7);
+            --text-color: #fff;
+            --border-radius: 0.625rem;
+            --spacing-unit: 1rem;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: var(--background-gradient);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: var(--spacing-unit);
+        }
+
+        .back-button {
+            position: absolute;
+            top: calc(var(--spacing-unit) * 1.25);
+            left: calc(var(--spacing-unit) * 1.25);
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            padding: calc(var(--spacing-unit) * 0.5) var(--spacing-unit);
+            font-size: 1rem;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+        }
+
+        .back-button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .post-container {
+            background-color: var(--container-bg);
+            padding: calc(var(--spacing-unit) * 2);
+            border-radius: var(--border-radius);
+            width: 90%;
+            max-width: 60rem;
+            margin-top: calc(var(--spacing-unit) * 4);
+            box-shadow: 0 0 1.25rem rgba(0, 0, 0, 0.3);
+        }
+
+        .post-header {
+            margin-bottom: calc(var(--spacing-unit) * 2);
+        }
+
+        .post-header h1 {
+            color: var(--primary-color);
+            margin-top: 0;
+            margin-bottom: var(--spacing-unit);
+        }
+
+        .post-date {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+        }
+
+        .post-content {
+            line-height: 1.8;
+        }
+
+        .post-content p {
+            margin-bottom: var(--spacing-unit);
+        }
+
+        .player-spotlight {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: var(--spacing-unit);
+            border-radius: var(--border-radius);
+            margin: var(--spacing-unit) 0;
+        }
+
+        .player-spotlight h3 {
+            color: var(--primary-color);
+            margin-top: 0;
+        }
+
+        @media (max-width: 48rem) {
+            .post-container {
+                width: 95%;
+                padding: var(--spacing-unit);
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-button">← Back to News</a>
+    
+    <div class="post-container">
+        <div class="post-header">
+            <h1>Community Spotlight</h1>
+            <div class="post-date">March 13, 2024</div>
+        </div>
+        
+        <div class="post-content">
+            <p>Welcome to our first Community Spotlight! In this series, we'll be highlighting exceptional players, amazing plays, and interesting strategies from our growing community.</p>
+
+            <h2>Player of the Week: FlagMaster</h2>
+            <div class="player-spotlight">
+                <h3>FlagMaster</h3>
+                <p>This week's spotlight shines on FlagMaster, who has achieved an impressive 50-flag capture streak! Their innovative strategy of using the map's obstacles as cover while making flag runs has inspired many players.</p>
+                <p>Key achievements:</p>
+                <ul>
+                    <li>50 consecutive flag captures</li>
+                    <li>Highest score in a single match: 15 captures</li>
+                    <li>Most valuable player in 25 team matches</li>
+                </ul>
+            </div>
+
+            <h2>Amazing Play of the Week</h2>
+            <p>In a recent match, player "NinjaRunner" pulled off an incredible triple flag capture while being pursued by three opponents. Using a combination of quick reflexes and clever use of the map's terrain, they managed to secure victory for their team in the final seconds of the match.</p>
+
+            <h2>Community Strategy: The Decoy Rush</h2>
+            <p>One of the most interesting strategies we've seen develop in the community is the "Decoy Rush." This involves:</p>
+            <ul>
+                <li>One player acts as a decoy, drawing attention</li>
+                <li>Two players provide cover fire</li>
+                <li>One player makes a stealth approach to the flag</li>
+                <li>Team members rotate roles based on the situation</li>
+            </ul>
+
+            <h2>Community Events</h2>
+            <p>We're excited to announce our first community tournament, coming next month! The tournament will feature:</p>
+            <ul>
+                <li>Team-based competition</li>
+                <li>Custom maps</li>
+                <li>Special rewards for winners</li>
+                <li>Live commentary</li>
+            </ul>
+
+            <p>Want to be featured in our next Community Spotlight? Share your amazing plays and strategies with us! You can submit your content through our feedback form or by tagging us on social media.</p>
+
+            <p>Stay tuned for more community highlights and don't forget to check out our Discord server to connect with other players!</p>
+        </div>
+    </div>
+</body>
+</html> 

@@ -27,9 +27,15 @@ setTimeout(() => {
 
 export const CANVAS_WIDTH = 1600;
 export const CANVAS_HEIGHT = 800;
+export let musicPlay = false;
+musicPlay = true;
 const PORT = 4566;
 let coverart = new Image();
 coverart.src = "/assets/coverart.png";
+
+let titleMusic = new Audio("/assets/music/evansong2.wav");
+titleMusic.loop = true;
+titleMusic.play();
 
 function namefieldPlaceholderError(error, namefield) {
     namefield.deactivate();
@@ -83,6 +89,13 @@ class menuScene extends Scene {
             "Back"
         );
 
+        this.musicButton = new OCtxButton(
+            50, 150,
+            buttonWidth,
+            buttonHeight,
+            "Music Toggle"
+        );
+
         this.nameField.setPlaceholder("Enter your name");
     }
 
@@ -93,9 +106,15 @@ class menuScene extends Scene {
       this.startButton.update(commands);
       this.nameField.update(commands, dt);
       this.backButton.update(commands);
+      this.musicButton.update(commands);
 
       if (this.backButton.isClicked(commands)) {
         window.location.href = "/";
+      }
+
+      if (this.musicButton.isClicked(commands)) {
+        musicPlay = !musicPlay;
+        titleMusic.muted = !musicPlay;
       }
   
       if (!this.startButton.isClicked(commands)) return;
@@ -125,6 +144,7 @@ class menuScene extends Scene {
           naem = entered;
           this.nameField.deactivate();
           commands.switchScene(1);
+          titleMusic.pause();
           switched = true;
         } catch (err) {
           console.error(err);
@@ -144,6 +164,15 @@ class menuScene extends Scene {
         this.startButton.draw(ctx);
         this.nameField.draw(ctx);
         this.backButton.draw(ctx);
+        this.musicButton.draw(ctx);
+        // draw a check/x near the button
+        ctx.drawText(
+            this.musicButton.bounds.x + this.musicButton.bounds.width / 5,
+            this.musicButton.bounds.y + this.musicButton.bounds.height / 2 + 10,
+            musicPlay ? "✓" : "✗",
+            "black",
+            20
+        );
         ctx.drawText(
             CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166, // 16.6% of canvas width offset 
             CANVAS_HEIGHT * 0.2, // 10% of canvas height from the top

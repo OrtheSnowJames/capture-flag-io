@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Features Coming Soon - Capture the Flag News</title>
+    <style>
+        :root {
+            --primary-color: #ff5722;
+            --primary-hover: #e64a19;
+            --background-gradient: linear-gradient(135deg, #1e3c72, #2a5298);
+            --container-bg: rgba(0, 0, 0, 0.7);
+            --text-color: #fff;
+            --border-radius: 0.625rem;
+            --spacing-unit: 1rem;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: var(--background-gradient);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: var(--spacing-unit);
+        }
+
+        .back-button {
+            position: absolute;
+            top: calc(var(--spacing-unit) * 1.25);
+            left: calc(var(--spacing-unit) * 1.25);
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            padding: calc(var(--spacing-unit) * 0.5) var(--spacing-unit);
+            font-size: 1rem;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+        }
+
+        .back-button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .post-container {
+            background-color: var(--container-bg);
+            padding: calc(var(--spacing-unit) * 2);
+            border-radius: var(--border-radius);
+            width: 90%;
+            max-width: 60rem;
+            margin-top: calc(var(--spacing-unit) * 4);
+            box-shadow: 0 0 1.25rem rgba(0, 0, 0, 0.3);
+        }
+
+        .post-header {
+            margin-bottom: calc(var(--spacing-unit) * 2);
+        }
+
+        .post-header h1 {
+            color: var(--primary-color);
+            margin-top: 0;
+            margin-bottom: var(--spacing-unit);
+        }
+
+        .post-date {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+        }
+
+        .post-content {
+            line-height: 1.8;
+        }
+
+        .post-content p {
+            margin-bottom: var(--spacing-unit);
+        }
+
+        @media (max-width: 48rem) {
+            .post-container {
+                width: 95%;
+                padding: var(--spacing-unit);
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-button">← Back to News</a>
+    
+    <div class="post-container">
+        <div class="post-header">
+            <h1>New Features Coming Soon</h1>
+            <div class="post-date">March 14, 2024</div>
+        </div>
+        
+        <div class="post-content">
+            <p>We're excited to announce several new features that will be coming to Capture the Flag in the near future! Our development team has been hard at work creating new content and improvements based on your feedback.</p>
+
+            <h2>Custom Maps</h2>
+            <p>One of our most requested features is finally coming: a map editor! Players will be able to create and share their own custom maps. The editor will include:</p>
+            <ul>
+                <li>Intuitive drag-and-drop interface</li>
+                <li>Various obstacle types and terrain options</li>
+                <li>Team spawn point configuration</li>
+                <li>Map testing tools</li>
+                <li>Community map sharing and rating system</li>
+            </ul>
+
+            <h2>Power-ups System</h2>
+            <p>We're introducing a new power-ups system that will add strategic depth to matches:</p>
+            <ul>
+                <li>Speed boost: Temporary movement speed increase</li>
+                <li>Shield: Temporary invulnerability</li>
+                <li>Invisibility: Brief period of being unseen</li>
+                <li>Double points: Score multiplier for captures</li>
+            </ul>
+
+            <h2>Enhanced Team Modes</h2>
+            <p>New team-based game modes are in development:</p>
+            <ul>
+                <li>Capture the Flag Classic: The traditional mode you know and love</li>
+                <li>Team Deathmatch: Focus on eliminating opponents</li>
+                <li>King of the Hill: Control strategic points on the map</li>
+                <li>Domination: Capture and hold multiple flags</li>
+            </ul>
+
+            <h2>Quality of Life Improvements</h2>
+            <p>We're also working on several quality of life improvements:</p>
+            <ul>
+                <li>Improved matchmaking system</li>
+                <li>Better team balancing</li>
+                <li>Enhanced visual effects</li>
+                <li>More customization options</li>
+                <li>Improved performance and optimization</li>
+            </ul>
+
+            <p>These features are currently in development and will be released in phases over the coming months. We'll keep you updated on our progress and announce specific release dates as we get closer to launch.</p>
+
+            <p>As always, we value your feedback! Let us know what you think about these upcoming features and what else you'd like to see in the game.</p>
+        </div>
+    </div>
+</body>
+</html> 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { otherCtx, contextEngine, Commands, Scene, OCtxButton, OCtxTextField } from "./context-engine.mjs";
-import { naem, engine, lobbyPath, timeData, CANVAS_WIDTH, CANVAS_HEIGHT } from "./script.js";
+import { naem, engine, lobbyPath, musicPlay, timeData, CANVAS_WIDTH, CANVAS_HEIGHT } from "./script.js";
 
 // filepath: /home/james/Documents/capture-flag-io/node/public/script/game.js
 
@@ -8,6 +8,10 @@ const PORT = 4566;
 let initialized = false;
 
 let client;
+let newMusicPlay;
+setTimeout(() => {
+    newMusicPlay = musicPlay;
+}, 1000);
 export let goToDead = true;
 let intermission = false;
 let winners = {"player": "", "team": ""};
@@ -52,6 +56,18 @@ let redFlagImage = new Image(25, 100);
     redFlagImage.src = "/assets/redflag.png";
 let blueFlagImage = new Image(25, 100);
     blueFlagImage.src = "/assets/blueflag.png";
+
+// audio
+let audio = {
+    maps: {
+        "map1": {
+            "bgm": new Audio("/assets/music/evansong1.wav")
+        },
+        "map2": {
+            "bgm": new Audio("/assets/music/evansong1.wav")
+        }
+    }
+}
 
 // Default field - dimensions will come from the map data
 const field = {
@@ -518,9 +534,10 @@ let game = {
 let getClient = false;
 let sendName = false; 
 export class gameScene extends Scene {
-    messageField = new OCtxTextField(0, readableMessages * 30, 500, 60, Math.round(500/20));
+    messageField = new OCtxTextField(0, readableMessages * 30, 500, 60, Math.round(500/23));
     submitButton = new OCtxButton(520, readableMessages * 30, 100, 60, "Send");
-    backButton = new OCtxButton(50, messageBoxHeight + 70, 100, 60, "Back");
+    musicButton = new OCtxButton(50, messageBoxHeight + 140, 140, 60, "Music Mute");
+    backButton = new OCtxButton(50, messageBoxHeight + 70, 140, 60, "Back");
 
     // Replace individual buttons with an array
     mapButtons = [];
@@ -939,6 +956,10 @@ export class gameScene extends Scene {
             // Reset client-side timer
             this.timestamp = new timeData(5 * 60);
             
+            // Start BGM for initial map and set initial mute state
+            startBGM();
+            muteBGM(!newMusicPlay);
+            
             setTimeout(() => {
                 client.emit('name', naem);
             }, 100);
@@ -953,6 +974,7 @@ export class gameScene extends Scene {
         sendName = false;
         getClient = false;
         dead = false;
+        muteBGM(true); // Mute BGM when exiting
         game = {
             players: {},
             flags: {},
@@ -965,6 +987,7 @@ export class gameScene extends Scene {
     }
 
     resetGame() {
+        muteBGM(true); // Mute BGM when resetting game
         game = {
             players: {},
             flags: {},
@@ -1004,6 +1027,8 @@ export class gameScene extends Scene {
                         parseMap(this.loadedMap);
                     } else {
                         this.loadedMap = game.currentMap;
+                        // Start BGM for new map
+                        startBGM();
                     }
                 }
                 
@@ -1019,6 +1044,12 @@ export class gameScene extends Scene {
                 this.messageField.update(commands, deltaTime);
                 this.submitButton.update(commands);
                 this.backButton.update(commands);
+                this.musicButton.update(commands);
+
+                if (this.musicButton.isClicked(commands)) {
+                    newMusicPlay = !newMusicPlay;
+                    muteBGM(!newMusicPlay);
+                }
 
                 if (this.backButton.isClicked(commands)) {
                     this.resetGame();
@@ -1230,6 +1261,13 @@ export class gameScene extends Scene {
                             this.requestMapChange(winningMap);
                         }
                     }
+                }
+
+                // Handle BGM based on game state
+                if (intermission) {
+                    muteBGM(true);
+                } else if (newMusicPlay) {
+                    muteBGM(false);
                 }
             }
         } catch (e) {
@@ -1537,7 +1575,16 @@ export class gameScene extends Scene {
             this.messageField.draw(ctx, false, false);
             this.submitButton.draw(ctx, false, false);
             this.backButton.draw(ctx, false, false);
-
+            this.musicButton.draw(ctx, false, false);
+            // draw a check/x near the button
+            ctx.drawText(
+                this.musicButton.bounds.x + this.musicButton.bounds.width / 5,
+                this.musicButton.bounds.y + this.musicButton.bounds.height - 7,
+                newMusicPlay ? "✓" : "✗",
+                "black",
+                20,
+                false, false
+            );
             // Draw Timer at the top center with black box
             if (!intermission) {
                 const timerBoxWidth = 150; // Made wider to accommodate OVERTIME text
@@ -1758,4 +1805,21 @@ function checkPlayerOnDashpad(player) {
         }
     }
     return false; // Not on a dashpad
+}
+
+// Add BGM control functions
+function startBGM() {
+    const currentMap = game.currentMap;
+    if (audio.maps[currentMap] && audio.maps[currentMap].bgm) {
+        audio.maps[currentMap].bgm.loop = true;
+        audio.maps[currentMap].bgm.play().catch(e => console.log("BGM play failed:", e));
+    }
+}
+
+function muteBGM(mute) {
+    Object.values(audio.maps).forEach(map => {
+        if (map.bgm) {
+            map.bgm.muted = mute;
+        }
+    });
 }
