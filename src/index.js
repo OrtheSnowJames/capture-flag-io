@@ -124,6 +124,11 @@ app.get('/script.js', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/script/script.js'));
 });
 
+app.get('/favicon.ico', (req, res) => {
+    console.log("favicon.ico");
+    res.sendFile(path.join(__dirname, 'assets/favicon.ico'));
+});
+
 app.get('/context-engine.mjs', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/script/context-engine.mjs'));
 });
@@ -376,21 +381,7 @@ class GameServer {
             console.log(`A user connected to ${this.io.name}!`);
 
             socket.on('message', (msg) => {
-                if (isProfane(msg)) {
-                    msg = censorProfanity(msg);
-                }
-                this.game.messages.push(msg);
-                // if the messages array is greater than 10, remove the oldest message
-                if (this.game.messages.length > 10) {
-                    this.game.messages.shift();
-                }
-
-                // the name of the player who sent the message is in [player] said [msg]
                 const player = this.game.players[msg.split(" said ")[0]];
-                if (player) {
-                    this.emitWithLogging('message', msg);
-                }
-
                 if (this.ops.has(player.name) && msg.split(" said ")[1].startsWith("!op")) {
                     console.log("Operator command received: " + msg);
                     // get the part after !op so like !op kick bob = kick bob
@@ -407,11 +398,31 @@ class GameServer {
                     } else if (command.startsWith("exec")) {
                         exec(command.split(" ")[1]);
                     } else if (command.startsWith("map")) {
-                        this.changeMap(command.split(" ")[1]);
+                        this.changeMap(command.split("exec ")[1]);
                     } else if (command.startsWith("highscore")) {
                         this.game.messages.push("[System.Log] says Highscore: " + this.highscore);
                         this.emitWithLogging('message', "[System.Log] says Highscore: " + this.highscore);
+                    } else if (command.startsWith("announce")) {
+                        // get message to announce
+                        // get all to the right of announce
+                        const message = command.split("announce")[1];
+                        this.io.emit('announce', message);
+                        console.log("Announced: " + message);
                     }
+                } else {
+                    if (isProfane(msg)) {
+                        msg = censorProfanity(msg);
+                    }
+                    this.game.messages.push(msg);
+                    // if the messages array is greater than 10, remove the oldest message
+                    if (this.game.messages.length > 10) {
+                        this.game.messages.shift();
+                    }
+    
+                    // the name of the player who sent the message is in [player] said [msg]
+                    if (player) {
+                        this.emitWithLogging('message', msg);
+                    }    
                 }
             });
 
@@ -437,6 +448,14 @@ class GameServer {
 
                 this.emitWithLogging('newPlayer', JSON.stringify(player));
                 
+                Object.values(this.game.players).forEach(player => {
+                    if (this.ops.has(player.name)) {
+                        player.isOp = true;
+                    } else {
+                        player.isOp = false;
+                    }
+                });
+
                 socket.emit('gameState', JSON.stringify(this.game));
                 console.log("gameState", this.game);
                 console.log("flags", this.game.flags);
@@ -772,6 +791,7 @@ process.stdin.on('data', (input) => {
                         lobby.server.ops.add(playerName);
                         // Update the player's color to yellow
                         lobby.server.game.players[playerName].color = "yellow";
+                        lobby.server.game.players[playerName].isOp = true;
                         // Notify all clients about the updated player
                         lobby.server.io.emit('newPlayer', JSON.stringify(lobby.server.game.players[playerName]));
                         console.log(`Player ${playerName} is now op in lobby ${lobbyNumber}`);
@@ -790,6 +810,7 @@ process.stdin.on('data', (input) => {
         console.log('skip_round <lobby_number> - Skips the current round and starts voting phase.');
         console.log('feedback - Logs the feedback.txt file.');
         console.log('clear - Clears the console.');
+        console.log('op <lobby_number> <player_name> - Makes the player an op in the specified lobby.');
         console.log('Available lobbies:');
         lobbies.forEach((lobby, index) => {
             console.log(`Lobby ${index + 1}: ${lobby.path}`);

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Credits - Capture the Flag</title>
+    <style>
+        :root {
+            --primary-color: #ff5722;
+            --primary-hover: #e64a19;
+            --background-gradient: linear-gradient(135deg, #1e3c72, #2a5298);
+            --container-bg: rgba(0, 0, 0, 0.7);
+            --text-color: #fff;
+            --border-radius: 0.625rem;
+            --spacing-unit: 1rem;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: var(--background-gradient);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: var(--spacing-unit);
+        }
+
+        .back-button {
+            position: absolute;
+            top: calc(var(--spacing-unit) * 1.25);
+            left: calc(var(--spacing-unit) * 1.25);
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            padding: calc(var(--spacing-unit) * 0.5) var(--spacing-unit);
+            font-size: 1rem;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+        }
+
+        .back-button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .credits-container {
+            width: 90%;
+            max-width: 40rem;
+            margin-top: calc(var(--spacing-unit) * 4);
+            background-color: var(--container-bg);
+            padding: calc(var(--spacing-unit) * 2);
+            border-radius: var(--border-radius);
+            box-shadow: 0 0 1.25rem rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: calc(var(--spacing-unit) * 2);
+        }
+
+        .credit-section {
+            margin-bottom: calc(var(--spacing-unit) * 2);
+            padding: var(--spacing-unit);
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: var(--border-radius);
+        }
+
+        .credit-section h2 {
+            color: var(--primary-color);
+            margin-top: 0;
+            margin-bottom: var(--spacing-unit);
+        }
+
+        .credit-section h2 a {
+            color: var(--primary-color);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .credit-section h2 a:hover {
+            color: var(--primary-hover);
+            text-decoration: underline;
+        }
+
+        .credit-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .credit-list li {
+            margin-bottom: calc(var(--spacing-unit) * 0.5);
+            padding-left: calc(var(--spacing-unit) * 1.5);
+            position: relative;
+        }
+
+        .credit-list li:before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: var(--primary-color);
+        }
+
+        @media (max-width: 48rem) {
+            .credits-container {
+                width: 95%;
+                padding: var(--spacing-unit);
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-button">← Back to Game</a>
+    
+    <div class="credits-container">
+        <h1>Credits</h1>
+        
+        <div class="credit-section">
+            <h2><a href="https://github.com/OrtheSnowJames" target="_blank" rel="noopener noreferrer">James</a></h2>
+            <ul class="credit-list">
+                <li>Lead Designer</li>
+                <li>Lead Programmer</li>
+                <li>Game Architecture</li>
+                <li>UI/UX Design</li>
+                <li>Server Development</li>
+            </ul>
+        </div>
+
+        <div class="credit-section">
+            <h2><a href="https://www.youtube.com/@LuckyEv" target="_blank" rel="noopener noreferrer">Evan</a></h2>
+            <ul class="credit-list">
+                <li>Lead Song Artist</li>
+                <li>Original Soundtrack</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

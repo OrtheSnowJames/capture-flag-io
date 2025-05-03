@@ -177,6 +177,28 @@ export class otherCtx {
     setTextAlign(align = "left") {
         this.ctx.textAlign = align;
     }
+    drawRoundedRectFill(x, y, width, height, radius, color, cameraPos = true, cameraZoom = true) {
+        const zoom = cameraZoom ? this.zoom : 1;
+        const posX = cameraPos ? (x - this.cameraX) * zoom : x;
+        const posY = cameraPos ? (y - this.cameraY) * zoom : y;
+        const scaledWidth = width * zoom;
+        const scaledHeight = height * zoom;
+        const scaledRadius = radius * zoom;
+        
+        this.ctx.fillStyle = color;
+        this.ctx.beginPath();
+        this.ctx.moveTo(posX + scaledRadius, posY);
+        this.ctx.lineTo(posX + scaledWidth - scaledRadius, posY);
+        this.ctx.arcTo(posX + scaledWidth, posY, posX + scaledWidth, posY + scaledRadius, scaledRadius);
+        this.ctx.lineTo(posX + scaledWidth, posY + scaledHeight - scaledRadius);
+        this.ctx.arcTo(posX + scaledWidth, posY + scaledHeight, posX + scaledWidth - scaledRadius, posY + scaledHeight, scaledRadius);
+        this.ctx.lineTo(posX + scaledRadius, posY + scaledHeight);
+        this.ctx.arcTo(posX, posY + scaledHeight, posX, posY + scaledHeight - scaledRadius, scaledRadius);
+        this.ctx.lineTo(posX, posY + scaledRadius);
+        this.ctx.arcTo(posX, posY, posX + scaledRadius, posY, scaledRadius);
+        this.ctx.closePath();
+        this.ctx.fill();
+    }
 }
 otherCtx.prototype.setTextAlign = function (align = "left") {
     this.ctx.textAlign = align;
@@ -288,7 +310,7 @@ export class OCtxButton {
         const offsetX = this.isPressed ? 1 : 0;
         const offsetY = this.isPressed ? 1 : 0;
         if (this.useRoundedCorners) {
-            ctx.drawPolygon(this.getRoundedRectPoints(this.bounds.x, this.bounds.y, this.bounds.width, this.bounds.height, this.cornerRadius), currentColor, cameraPos, cameraZoom);
+            ctx.drawRoundedRectFill(this.bounds.x, this.bounds.y, this.bounds.width, this.bounds.height, this.cornerRadius, currentColor, cameraPos, cameraZoom);
             this.drawRoundedRectBorder(ctx, this.bounds.x, this.bounds.y, this.bounds.width, this.bounds.height, this.cornerRadius, this.borderColor, borderThickness, cameraPos, cameraZoom);
         }
         else {
@@ -297,7 +319,15 @@ export class OCtxButton {
         }
         const textColor = this.enabled ? this.textColor : this.adjustAlpha(this.textColor, 0.5);
         ctx.setTextAlign("center");
-        ctx.drawText(this.bounds.x + this.bounds.width / 2, this.bounds.y + this.bounds.height / 2 + this.fontSize / 3, this.label, textColor, this.fontSize, cameraPos, cameraZoom);
+        ctx.drawText(
+            this.bounds.x + this.bounds.width / 2 + offsetX, 
+            this.bounds.y + this.bounds.height / 2 + this.fontSize / 2 + offsetY, 
+            this.label, 
+            textColor, 
+            this.fontSize, 
+            cameraPos, 
+            cameraZoom
+        );
         ctx.setTextAlign("left");
     }
     isClicked(commands) {
@@ -319,12 +349,38 @@ export class OCtxButton {
     }
     drawRoundedRectBorder(ctx, x, y, w, h, r, color, thickness, cameraPos = true, cameraZoom = true) {
         const zoom = cameraZoom ? ctx.zoom : 1;
-        const points = this.getRoundedRectPoints(cameraPos ? (x - ctx.cameraX) * zoom : x, cameraPos ? (y - ctx.cameraY) * zoom : y, w * zoom, h * zoom, r * zoom);
-        for (let i = 0; i < points.length; i++) {
-            const p1 = points[i];
-            const p2 = points[(i + 1) % points.length];
-            ctx.drawLine(p1.x, p1.y, p2.x, p2.y, color, cameraPos, cameraZoom);
-        }
+        const rawCtx = ctx.rawCtx();
+        const posX = cameraPos ? (x - ctx.cameraX) * zoom : x;
+        const posY = cameraPos ? (y - ctx.cameraY) * zoom : y;
+        const width = w * zoom;
+        const height = h * zoom;
+        const radius = r * zoom;
+        
+        // Save current state
+        rawCtx.save();
+        
+        // Set up stroke style
+        rawCtx.strokeStyle = color;
+        rawCtx.lineWidth = thickness;
+        
+        // Draw the rounded rectangle path
+        rawCtx.beginPath();
+        rawCtx.moveTo(posX + radius, posY);
+        rawCtx.lineTo(posX + width - radius, posY);
+        rawCtx.arcTo(posX + width, posY, posX + width, posY + radius, radius);
+        rawCtx.lineTo(posX + width, posY + height - radius);
+        rawCtx.arcTo(posX + width, posY + height, posX + width - radius, posY + height, radius);
+        rawCtx.lineTo(posX + radius, posY + height);
+        rawCtx.arcTo(posX, posY + height, posX, posY + height - radius, radius);
+        rawCtx.lineTo(posX, posY + radius);
+        rawCtx.arcTo(posX, posY, posX + radius, posY, radius);
+        rawCtx.closePath();
+        
+        // Stroke the path
+        rawCtx.stroke();
+        
+        // Restore state
+        rawCtx.restore();
     }
     drawRectBorder(ctx, x, y, w, h, color, thickness, cameraPos = true, cameraZoom = true) {
         const zoom = cameraZoom ? ctx.zoom : 1;
@@ -416,6 +472,9 @@ export class OCtxTextField {
     }
     setInvisible(invisible) {
         this.invisible = invisible;
+    }
+    setMaxLength(maxLength) {
+        this.maxLength = maxLength;
     }
     isInvisible() {
         return this.invisible;
@@ -648,7 +707,10 @@ export class ContextEngine {
     initialSceneIndex;
     canvasWidth;
     canvasHeight;
+    maxCanvasWidth;
+    maxCanvasHeight;
     canvas = null;
+    resizeCanvas = false;
     ctx = null;
     other = null;
     commands = null;
@@ -668,6 +730,8 @@ export class ContextEngine {
         this.initialSceneIndex = initialSceneIndex;
         this.canvasWidth = canvasWidth;
         this.canvasHeight = canvasHeight;
+        this.maxCanvasWidth = canvasWidth;
+        this.maxCanvasHeight = canvasHeight;
     }
     initialize() {
         this.canvas = document.createElement('canvas');
@@ -700,15 +764,24 @@ export class ContextEngine {
         const currentScene = this.scenes[this.commands.getCurrentSceneIndex()];
         currentScene.update(deltaTime, this.commands);
         currentScene.draw(this.other);
+        if (this.resizeCanvas) {
+            this.resizeCanvasFn(window.innerWidth, window.innerHeight);
+        }
         requestAnimationFrame(() => this.loop(currentTime));
     }
     stop() {
         this.isRunning = false;
     }
+    resizeCanvasFn(width, height) {
+        this.canvasWidth = width > this.maxCanvasWidth ? this.maxCanvasWidth : width;
+        this.canvasHeight = height > this.maxCanvasHeight ? this.maxCanvasHeight : height;
+        this.resizeCanvas = true;
+    }
 }
 // Keep the original function for legacy support, but use the new class internally
-export function contextEngine(scenes, initialSceneIndex = 0, canvasWidth = 800, canvasHeight = 600) {
+export function contextEngine(scenes, initialSceneIndex = 0, canvasWidth = 800, canvasHeight = 600, resizeCanvas = false) {
     const engine = new ContextEngine(scenes, initialSceneIndex, canvasWidth, canvasHeight);
+    engine.resizeCanvas = resizeCanvas;
     engine.initialize().start();
     return engine; // Return the engine instance for advanced usage
 }

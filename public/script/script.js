@@ -47,10 +47,12 @@ function namefieldPlaceholderError(error, namefield) {
 
 class menuScene extends Scene {
     #loading = false;            // private flag to avoid re‑entry
-
     constructor() {
         super();
         this.init();
+        this.titleSize = 50;
+        this.titleAnimationTime = 0;
+        this.titleAnimationSpeed = 1/30; // One cycle per 30 seconds
     }
 
     async onLoad(commands) {
@@ -109,6 +111,11 @@ class menuScene extends Scene {
       this.nameField.update(commands, dt);
       this.backButton.update(commands);
       this.musicButton.update(commands);
+      
+      // Update title animation using deltaTime
+      this.titleAnimationTime += dt;
+      // Use sine wave to oscillate between 40 and 50, with proper time scaling
+      this.titleSize = 45 + 5 * Math.sin(this.titleAnimationTime * this.titleAnimationSpeed * Math.PI);
 
       if (this.backButton.isClicked(commands)) {
         window.location.href = "/";
@@ -157,12 +164,33 @@ class menuScene extends Scene {
     }
 
     draw(ctx) {
-        if (switched) {
-            return;
-        }
         ctx.setCamera(0, 0);
+        ctx.setZoom(1);
         ctx.clearBackground('black');
         ctx.drawImage(coverart, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        
+        // Draw title with animated size
+        ctx.setTextAlign("center");
+        ctx.drawText(
+            CANVAS_WIDTH / 2,
+            CANVAS_HEIGHT * 0.2,
+            "Welcome to capture-flag-io!!1",
+            "white",
+            this.titleSize
+        );
+        ctx.setTextAlign("left");
+
+        // pick a random tip from the tips array
+        ctx.rawCtx().font = "50px Arial";
+        ctx.drawTextRotated(
+          CANVAS_WIDTH / 2 + ctx.rawCtx().measureText("Welcome to capture-flag-io!!1").width * 0.166 + 200, // 16.6% of canvas width offset + 200px
+          CANVAS_HEIGHT * 0.2 + 40, // 10% of canvas height from the top - 20px
+          randomTip,
+          "yellow",
+          10,
+          -Math.PI / 4
+      );
+
         this.startButton.draw(ctx);
         this.nameField.draw(ctx);
         this.backButton.draw(ctx);
@@ -174,25 +202,6 @@ class menuScene extends Scene {
             musicPlay ? "✓" : "✗",
             "black",
             20
-        );
-        ctx.drawText(
-            CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166, // 16.6% of canvas width offset 
-            CANVAS_HEIGHT * 0.2, // 10% of canvas height from the top
-            "Welcome to capture-flag-io!!1",
-            "white",
-            50
-        );
-        // pick a random tip from the tips array
-
-
-        // draw the text rotated 45 degrees and a bit away from the 1 at the end of the text
-        ctx.drawTextRotated(
-            (CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.165) + ctx.rawCtx().measureText("Welcome to capture-flag-io!!1").width, // 16.6% of canvas width offset 
-            CANVAS_HEIGHT * 0.2 + 60, // 10% of canvas height from the top
-            randomTip,
-            "yellow",
-            10,
-            -(Math.PI / 4)
         );
     }
 }
@@ -307,4 +316,4 @@ let deadSceneObj = new deadScene();
 
 let game = [menuSceneObj, gameSceneObj, deadSceneObj];
 
-engine = contextEngine(game, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // call the engine
+engine = contextEngine(game, 0, CANVAS_WIDTH, CANVAS_HEIGHT, true); // call the engine

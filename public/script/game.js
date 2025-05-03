@@ -538,6 +538,9 @@ export class gameScene extends Scene {
     submitButton = new OCtxButton(520, readableMessages * 30, 100, 60, "Send");
     musicButton = new OCtxButton(50, messageBoxHeight + 140, 140, 60, "Music Mute");
     backButton = new OCtxButton(50, messageBoxHeight + 70, 140, 60, "Back");
+    announcementText = "";
+    announcementTimer = 0;
+    announcementActive = false;
 
     // Replace individual buttons with an array
     mapButtons = [];
@@ -604,6 +607,7 @@ export class gameScene extends Scene {
         client.on('message', (data) => {
             const message = data;
             if (typeof message !== 'string') return;
+            if (message.startsWith("!op")) return;
             game.messages.push(message);
             if (game.messages.length > readableMessages) {
                 game.messages.shift(); // Remove the oldest message
@@ -926,6 +930,12 @@ export class gameScene extends Scene {
                 });
             }
         });
+
+        client.on('announce', (message) => {
+            this.announcementText = message;
+            this.announcementTimer = 7; // 7 seconds
+            this.announcementActive = true;
+        });
     }
 
     async onLoad(commands) {
@@ -1021,254 +1031,269 @@ export class gameScene extends Scene {
     update(deltaTime, commands) {
         try {
             if (initialized && this.mapsLoaded) {
-                // Check if map has changed
-                if (game.currentMap !== this.loadedMap) {
-                    if (!parseMap(game.currentMap)) {
-                        // Fall back to the previous map if parsing fails
-                        parseMap(this.loadedMap);
-                    } else {
-                        this.loadedMap = game.currentMap;
-                        // Start BGM for new map
-                        startBGM();
+                // Update announcement timer
+                if (this.announcementActive) {
+                    this.announcementTimer -= deltaTime;
+                    if (this.announcementTimer <= 0) {
+                        this.announcementActive = false;
+                        this.announcementText = "";
                     }
                 }
-                
-                let moved = false;
 
-                // Update timestamp - was accidentally removed
-                // Only decrease time if not in overtime
-                if (!isOvertime) {
-                    this.timestamp.setSeconds(this.timestamp.seconds() - deltaTime);
+                // Only process movement if no announcement is active
+                if (game.players[naem].isOp) {
+                    this.messageField.setMaxLength(500);
                 }
-                
-                // UI
-                this.messageField.update(commands, deltaTime);
-                this.submitButton.update(commands);
-                this.backButton.update(commands);
-                this.musicButton.update(commands);
+                if (!this.announcementActive) {
+                    // Check if map has changed
+                    if (game.currentMap !== this.loadedMap) {
+                        if (!parseMap(game.currentMap)) {
+                            // Fall back to the previous map if parsing fails
+                            parseMap(this.loadedMap);
+                        } else {
+                            this.loadedMap = game.currentMap;
+                            // Start BGM for new map
+                            startBGM();
+                        }
+                    }
+                    
+                    let moved = false;
 
-                if (this.musicButton.isClicked(commands)) {
-                    newMusicPlay = !newMusicPlay;
-                    muteBGM(!newMusicPlay);
-                }
+                    // Update timestamp - was accidentally removed
+                    // Only decrease time if not in overtime
+                    if (!isOvertime) {
+                        this.timestamp.setSeconds(this.timestamp.seconds() - deltaTime);
+                    }
+                    
+                    // UI
+                    this.messageField.update(commands, deltaTime);
+                    this.submitButton.update(commands);
+                    this.backButton.update(commands);
+                    this.musicButton.update(commands);
 
-                if (this.backButton.isClicked(commands)) {
-                    this.resetGame();
-                    window.location.href = "/";
-                }
+                    if (this.musicButton.isClicked(commands)) {
+                        newMusicPlay = !newMusicPlay;
+                        muteBGM(!newMusicPlay);
+                    }
 
-                if (this.submitButton.isClicked(commands) || (commands.keys['Enter'] && this.messageField.isActive)) {
-                    // Submit message to server
-                    if (client && this.messageField.text.trim() !== "") {
+                    if (this.backButton.isClicked(commands)) {
+                        this.resetGame();
+                        window.location.href = "/";
+                    }
+
+                    if (this.submitButton.isClicked(commands) || (commands.keys['Enter'] && this.messageField.isActive)) {
+                        // Submit message to server
+                        if (client && this.messageField.text.trim() !== "") {
+                            this.messageField.deactivate();
+                            client.emit('message', `${naem} said ${this.messageField.text}`);
+                            this.messageField.text = "";
+                        }
+                    }
+                    
+                    if (commands.keys['Enter'] && !this.messageField.isActive) {
+                        this.messageField.activate();
+                    }
+
+                    if (commands.keys['Escape'] && this.messageField.isActive) {
                         this.messageField.deactivate();
-                        client.emit('message', `${naem} said ${this.messageField.text}`);
-                        this.messageField.text = "";
                     }
-                }
-                
-                if (commands.keys['Enter'] && !this.messageField.isActive) {
-                    this.messageField.activate();
-                }
 
-                if (commands.keys['Escape'] && this.messageField.isActive) {
-                    this.messageField.deactivate();
-                }
-
-                // Update all map buttons
-                this.mapButtons.forEach((button, index) => {
-                    button.update(commands);
-                    
-                    // Check if this button was clicked and there's a corresponding map
-                    if (button.isClicked(commands) && index < mapSelection.length) {
-                        const selectedMap = mapSelection[index];
-                        votedFor = selectedMap;
+                    // Update all map buttons
+                    this.mapButtons.forEach((button, index) => {
+                        button.update(commands);
                         
-                        // First update local vote tracking
-                        // Remove player from any existing votes
-                        for (const map in mapVotes) {
-                            if (mapVotes[map]) {
-                                mapVotes[map] = mapVotes[map].filter(player => player !== naem);
+                        // Check if this button was clicked and there's a corresponding map
+                        if (button.isClicked(commands) && index < mapSelection.length) {
+                            const selectedMap = mapSelection[index];
+                            votedFor = selectedMap;
+                            
+                            // First update local vote tracking
+                            // Remove player from any existing votes
+                            for (const map in mapVotes) {
+                                if (mapVotes[map]) {
+                                    mapVotes[map] = mapVotes[map].filter(player => player !== naem);
+                                }
+                            }
+                            
+                            // Initialize the selected map's vote array if needed
+                            if (!mapVotes[selectedMap]) {
+                                mapVotes[selectedMap] = [];
+                            }
+                            
+                            // Add player to the selected map's votes
+                            if (!mapVotes[selectedMap].includes(naem)) {
+                                mapVotes[selectedMap].push(naem);
+                            }
+                            
+                            // Inform server about the vote - use 'playerVotedFor' as that's what the server is listening for
+                            if (client) {
+                                client.emit('playerVotedFor', JSON.stringify({ player: naem, map: selectedMap }));
                             }
                         }
-                        
-                        // Initialize the selected map's vote array if needed
-                        if (!mapVotes[selectedMap]) {
-                            mapVotes[selectedMap] = [];
-                        }
-                        
-                        // Add player to the selected map's votes
-                        if (!mapVotes[selectedMap].includes(naem)) {
-                            mapVotes[selectedMap].push(naem);
-                        }
-                        
-                        // Inform server about the vote - use 'playerVotedFor' as that's what the server is listening for
-                        if (client) {
-                            client.emit('playerVotedFor', JSON.stringify({ player: naem, map: selectedMap }));
-                        }
-                    }
-                });
+                    });
 
-                // Check if player is on a dashpad
-                const onDashpad = checkPlayerOnDashpad(game.players[naem]);
-                
-                // Handle dash mechanics
-                if (onDashpad) {
-                    // Player is on a dashpad - just enable dash effect
-                    dashActive = true;
-                    dashTimeRemaining = dashDuration; // Keep refreshing dash duration
-                    dashCooldownRemaining = 0;
-                    // Player maintains control over direction
-                } else {
-                    // Normal dash mechanics
-                    if (dashCooldownRemaining > 0) {
-                        dashCooldownRemaining -= deltaTime;
-                    }
+                    // Check if player is on a dashpad
+                    const onDashpad = checkPlayerOnDashpad(game.players[naem]);
                     
-                    if (dashActive) {
-                        dashTimeRemaining -= deltaTime;
-                        if (dashTimeRemaining <= 0) {
-                            dashActive = false;
-                        }
-                    }
-                    
-                    // Trigger dash on spacebar press
-                    if (commands.keys[' '] && dashCooldownRemaining <= 0 && !dashActive) {
+                    // Handle dash mechanics
+                    if (onDashpad) {
+                        // Player is on a dashpad - just enable dash effect
                         dashActive = true;
-                        dashTimeRemaining = dashDuration;
-                        dashCooldownRemaining = dashCooldown;
-                    }
-                }
-
-                // Apply movement speed (dash effect increases speed)
-                const speed = dashActive ? moveSpeed * dashMultiplier : moveSpeed;
-                
-                // Filter mapObjects to separate inside and outside objects
-                const insideObjects = [field, ...mapObjects.filter(obj => obj.collideType === 'inside')];
-                const outsideObjects = mapObjects.filter(obj => obj.collideType === 'outside');
-                
-                // Use predictMove to get valid move directions
-                const moveDirections = predictMove(game.players[naem].x, game.players[naem].y, insideObjects, outsideObjects, field);
-                
-                // Apply movement only in valid directions
-                let validX = game.players[naem].x;
-                let validY = game.players[naem].y;
-                
-                if ((commands.keys['ArrowUp'] || commands.keys['w']) && moveDirections.w) {
-                    validY -= speed * deltaTime;
-                }
-                if ((commands.keys['ArrowLeft'] || commands.keys['a']) && moveDirections.a) {
-                    validX -= speed * deltaTime;
-                }
-                if ((commands.keys['ArrowDown'] || commands.keys['s']) && moveDirections.s) {
-                    validY += speed * deltaTime;
-                }
-                if ((commands.keys['ArrowRight'] || commands.keys['d']) && moveDirections.d) {
-                    validX += speed * deltaTime;
-                }
-                
-                // Final collision check to prevent getting stuck
-                if (!canMove(validX, validY, insideObjects, outsideObjects)) {
-                    validX = game.players[naem].x;
-                    validY = game.players[naem].y;
-                }
-                
-                // Only update position if it changed and we're not in intermission
-                if ((validX !== game.players[naem].x || validY !== game.players[naem].y) && !intermission) {
-                    game.players[naem].x = validX;
-                    game.players[naem].y = validY;
-                    
-                    const now = performance.now();
-                    if (now - lastMovementUpdate > movementUpdateRate) {
-                        client.emit('move', JSON.stringify({ name: naem, x: validX, y: validY }));
-                        lastMovementUpdate = now;
-                    }
-                }
-
-                // Update interpolation for other players
-                Object.keys(game.players).forEach(playerName => {
-                    if (playerName !== naem) {
-                        const player = game.players[playerName];
-                        // Increase interpolation time
-                        player.interpolationTime += deltaTime * 5; // Adjust speed factor as needed
-                        
-                        // Clamp interpolation time to [0, 1]
-                        if (player.interpolationTime > 1) player.interpolationTime = 1;
-                        
-                        // Interpolate position
-                        player.x = lerp(player.prevX, player.targetX, player.interpolationTime);
-                        player.y = lerp(player.prevY, player.targetY, player.interpolationTime);
-                    }
-                });
-
-                // Update interpolation for flags
-                Object.keys(game.flags).forEach(flagName => {
-                    const flag = game.flags[flagName];
-                    if (flag.interpolationTime !== undefined) {
-                        // Increase interpolation time
-                        flag.interpolationTime += deltaTime * 5; // Adjust speed factor as needed
-                        
-                        // Clamp interpolation time to [0, 1]
-                        if (flag.interpolationTime > 1) flag.interpolationTime = 1;
-                        
-                        // Don't interpolate if flag is being carried
-                        if (!flag.capturedBy) {
-                            // Interpolate position
-                            flag.x = lerp(flag.prevX, flag.targetX, flag.interpolationTime);
-                            flag.y = lerp(flag.prevY, flag.targetY, flag.interpolationTime);
-                        } else if (game.players[flag.capturedBy]) {
-                            // If flag is captured, make it follow the player directly
-                            const player = game.players[flag.capturedBy];
-                            flag.x = player.x;
-                            flag.y = player.y - flagHeight / 2;
+                        dashTimeRemaining = dashDuration; // Keep refreshing dash duration
+                        dashCooldownRemaining = 0;
+                        // Player maintains control over direction
+                    } else {
+                        // Normal dash mechanics
+                        if (dashCooldownRemaining > 0) {
+                            dashCooldownRemaining -= deltaTime;
                         }
-                    }
-                });
-                
-                // Cleanup expired player messages
-                const currentTime = performance.now();
-                Object.keys(playerMessages).forEach(playerName => {
-                    if (currentTime - playerMessages[playerName].timestamp > MESSAGE_DISPLAY_DURATION) {
-                        delete playerMessages[playerName];
-                    }
-                });
-
-                // Handle voting timer if active
-                if (intermission && votingActive) {
-                    votingTimer -= deltaTime;
-                    
-                    // When timer expires, choose the winning map and request map change
-                    if (votingTimer <= 0) {
-                        votingActive = false;
                         
-                        // Determine the map with the most votes
-                        let winningMap = null;
-                        let highestVotes = -1;
-                        
-                        for (const map in mapVotes) {
-                            const voteCount = mapVotes[map] ? mapVotes[map].length : 0;
-                            if (voteCount > highestVotes) {
-                                highestVotes = voteCount;
-                                winningMap = map;
+                        if (dashActive) {
+                            dashTimeRemaining -= deltaTime;
+                            if (dashTimeRemaining <= 0) {
+                                dashActive = false;
                             }
                         }
                         
-                        // If no votes or tie, randomly select from available maps
-                        if (winningMap === null && mapSelection.length > 0) {
-                            winningMap = mapSelection[Math.floor(Math.random() * mapSelection.length)];
-                        }
-                        
-                        // Request map change if we have a winning map
-                        if (winningMap && client) {
-                            this.requestMapChange(winningMap);
+                        // Trigger dash on spacebar press
+                        if (commands.keys[' '] && dashCooldownRemaining <= 0 && !dashActive) {
+                            dashActive = true;
+                            dashTimeRemaining = dashDuration;
+                            dashCooldownRemaining = dashCooldown;
                         }
                     }
-                }
 
-                // Handle BGM based on game state
-                if (intermission) {
-                    muteBGM(true);
-                } else if (newMusicPlay) {
-                    muteBGM(false);
+                    // Apply movement speed (dash effect increases speed)
+                    const speed = dashActive ? moveSpeed * dashMultiplier : moveSpeed;
+                    
+                    // Filter mapObjects to separate inside and outside objects
+                    const insideObjects = [field, ...mapObjects.filter(obj => obj.collideType === 'inside')];
+                    const outsideObjects = mapObjects.filter(obj => obj.collideType === 'outside');
+                    
+                    // Use predictMove to get valid move directions
+                    const moveDirections = predictMove(game.players[naem].x, game.players[naem].y, insideObjects, outsideObjects, field);
+                    
+                    // Apply movement only in valid directions
+                    let validX = game.players[naem].x;
+                    let validY = game.players[naem].y;
+                    
+                    if ((commands.keys['ArrowUp'] || commands.keys['w']) && moveDirections.w) {
+                        validY -= speed * deltaTime;
+                    }
+                    if ((commands.keys['ArrowLeft'] || commands.keys['a']) && moveDirections.a) {
+                        validX -= speed * deltaTime;
+                    }
+                    if ((commands.keys['ArrowDown'] || commands.keys['s']) && moveDirections.s) {
+                        validY += speed * deltaTime;
+                    }
+                    if ((commands.keys['ArrowRight'] || commands.keys['d']) && moveDirections.d) {
+                        validX += speed * deltaTime;
+                    }
+                    
+                    // Final collision check to prevent getting stuck
+                    if (!canMove(validX, validY, insideObjects, outsideObjects)) {
+                        validX = game.players[naem].x;
+                        validY = game.players[naem].y;
+                    }
+                    
+                    // Only update position if it changed and we're not in intermission
+                    if ((validX !== game.players[naem].x || validY !== game.players[naem].y) && !intermission) {
+                        game.players[naem].x = validX;
+                        game.players[naem].y = validY;
+                        
+                        const now = performance.now();
+                        if (now - lastMovementUpdate > movementUpdateRate) {
+                            client.emit('move', JSON.stringify({ name: naem, x: validX, y: validY }));
+                            lastMovementUpdate = now;
+                        }
+                    }
+
+                    // Update interpolation for other players
+                    Object.keys(game.players).forEach(playerName => {
+                        if (playerName !== naem) {
+                            const player = game.players[playerName];
+                            // Increase interpolation time
+                            player.interpolationTime += deltaTime * 5; // Adjust speed factor as needed
+                            
+                            // Clamp interpolation time to [0, 1]
+                            if (player.interpolationTime > 1) player.interpolationTime = 1;
+                            
+                            // Interpolate position
+                            player.x = lerp(player.prevX, player.targetX, player.interpolationTime);
+                            player.y = lerp(player.prevY, player.targetY, player.interpolationTime);
+                        }
+                    });
+
+                    // Update interpolation for flags
+                    Object.keys(game.flags).forEach(flagName => {
+                        const flag = game.flags[flagName];
+                        if (flag.interpolationTime !== undefined) {
+                            // Increase interpolation time
+                            flag.interpolationTime += deltaTime * 5; // Adjust speed factor as needed
+                            
+                            // Clamp interpolation time to [0, 1]
+                            if (flag.interpolationTime > 1) flag.interpolationTime = 1;
+                            
+                            // Don't interpolate if flag is being carried
+                            if (!flag.capturedBy) {
+                                // Interpolate position
+                                flag.x = lerp(flag.prevX, flag.targetX, flag.interpolationTime);
+                                flag.y = lerp(flag.prevY, flag.targetY, flag.interpolationTime);
+                            } else if (game.players[flag.capturedBy]) {
+                                // If flag is captured, make it follow the player directly
+                                const player = game.players[flag.capturedBy];
+                                flag.x = player.x;
+                                flag.y = player.y - flagHeight / 2;
+                            }
+                        }
+                    });
+                    
+                    // Cleanup expired player messages
+                    const currentTime = performance.now();
+                    Object.keys(playerMessages).forEach(playerName => {
+                        if (currentTime - playerMessages[playerName].timestamp > MESSAGE_DISPLAY_DURATION) {
+                            delete playerMessages[playerName];
+                        }
+                    });
+
+                    // Handle voting timer if active
+                    if (intermission && votingActive) {
+                        votingTimer -= deltaTime;
+                        
+                        // When timer expires, choose the winning map and request map change
+                        if (votingTimer <= 0) {
+                            votingActive = false;
+                            
+                            // Determine the map with the most votes
+                            let winningMap = null;
+                            let highestVotes = -1;
+                            
+                            for (const map in mapVotes) {
+                                const voteCount = mapVotes[map] ? mapVotes[map].length : 0;
+                                if (voteCount > highestVotes) {
+                                    highestVotes = voteCount;
+                                    winningMap = map;
+                                }
+                            }
+                            
+                            // If no votes or tie, randomly select from available maps
+                            if (winningMap === null && mapSelection.length > 0) {
+                                winningMap = mapSelection[Math.floor(Math.random() * mapSelection.length)];
+                            }
+                            
+                            // Request map change if we have a winning map
+                            if (winningMap && client) {
+                                this.requestMapChange(winningMap);
+                            }
+                        }
+                    }
+
+                    // Handle BGM based on game state
+                    if (intermission) {
+                        muteBGM(true);
+                    } else if (newMusicPlay) {
+                        muteBGM(false);
+                    }
                 }
             }
         } catch (e) {
@@ -1464,7 +1489,7 @@ export class gameScene extends Scene {
         });
 
         // Draw lobby path in bottom left
-        ctx.drawText(10, CANVAS_HEIGHT - 30, `Lobby: ${lobbyPath}`, "white", 16, false, false);
+        ctx.drawText(10, CANVAS_HEIGHT - 30, `Lobby: ${lobbyPath}, Map: ${currentMapData.name}`, "white", 16, false, false);
 
         // Draw flags if they exist
         if (game.flags) {
@@ -1498,6 +1523,11 @@ export class gameScene extends Scene {
                     player.color) {
                     // Check if player is op and use yellow color if they are
                     const playerColor = player.isOp ? "yellow" : player.color;
+                    if (player.isOp && player.name === naem) {
+                        this.messageField.setMaxLength(500);
+                    } else if (player.isOp) {
+                        this.messageField.setMaxLength(100);
+                    }
                     ctx.drawRect(player.x, player.y, playerWidth, playerHeight, playerColor);
                     
                     // Draw player name if it exists
@@ -1712,6 +1742,25 @@ export class gameScene extends Scene {
                     ctx.drawText(CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.5, "Waiting for next game...", "white", 20, false, false);
                 }
             }
+        }
+
+        // Draw announcement overlay if active
+        if (this.announcementActive) {
+            // Semi-transparent black background
+            ctx.drawRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, "rgba(0, 0, 0, 0.7)", false, false);
+            
+            // Draw announcement text
+            ctx.setTextAlign("center");
+            ctx.drawText(
+                CANVAS_WIDTH / 2,
+                CANVAS_HEIGHT / 2,
+                this.announcementText,
+                "white",
+                30,
+                false,
+                false
+            );
+            ctx.setTextAlign("left");
         }
     }
 
