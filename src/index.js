@@ -651,6 +651,9 @@ app.get('/check-name', (req, res) => {
     const lobbyObj = lobbies.find(l => l.path === lobby);
     if (!lobbyObj) return res.status(404).json({ available: false });
 
+    // Check if name contains spaces
+    if (name.includes(' ')) return res.json({ available: false, reason: 'Names cannot contain spaces' });
+
     const taken = Boolean(lobbyObj.server.game.players[name]);
     if (taken || isProfane(name)) return res.json({ available: false });
 

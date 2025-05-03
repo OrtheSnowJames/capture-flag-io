@@ -133,6 +133,12 @@ class menuScene extends Scene {
         namefieldPlaceholderError("Please enter a name", this.nameField);
         return;
       }
+      
+      // Check for spaces in name
+      if (entered.includes(' ')) {
+        namefieldPlaceholderError("Names cannot contain spaces", this.nameField);
+        return;
+      }
   
       this.#loading = true;      // lock until we finish
       (async () => {
@@ -140,12 +146,13 @@ class menuScene extends Scene {
           const { path } = await fetch(`/lobby`).then(r => r.json());
           lobbyPath = path;
   
-          const { available } = await fetch(
+          const response = await fetch(
             `/check-name?name=${encodeURIComponent(entered)}&lobby=${lobbyPath}`
           ).then(r => r.json());
   
-          if (!available) {
-            namefieldPlaceholderError("Name already taken", this.nameField);
+          if (!response.available) {
+            const errorMessage = response.reason || "Name already taken";
+            namefieldPlaceholderError(errorMessage, this.nameField);
             this.#loading = false;
             return;
           }
