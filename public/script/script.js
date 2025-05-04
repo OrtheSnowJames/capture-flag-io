@@ -146,7 +146,10 @@ class menuScene extends Scene {
         commands.switchScene(3);
       }
   
-      if (!this.startButton.isClicked(commands) && !this.privateButton.isClicked(commands)) return;
+      let startButtonClicked = this.startButton.isClicked(commands);
+      let privateButtonClicked = this.privateButton.isClicked(commands);
+
+      if (!startButtonClicked && !privateButtonClicked) return;
   
       const entered = this.nameField.getText().trim();
       if (!entered) {
@@ -161,7 +164,7 @@ class menuScene extends Scene {
       }
   
       this.#loading = true;      // lock until we finish
-      if (this.startButton.isClicked(commands)) {
+      if (startButtonClicked) {
         console.log("not private");
         (async () => {
           try {
@@ -190,7 +193,7 @@ class menuScene extends Scene {
             this.#loading = false;
           }
         })();                      // immediately‑invoked async function
-      } else {
+      } else if (privateButtonClicked) {
         console.log("private");
         (async () => {
           try {
@@ -295,6 +298,7 @@ class privateJoinScene extends Scene {
     }
 
     if (this.startButton.isClicked(commands)) {
+      console.log("start button clicked");
       (async () => {
         try {
           const path = await this.lobbyPathField.getText();
