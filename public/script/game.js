@@ -31,6 +31,19 @@ const fieldHeight = 500;
 const messageBoxHeight = readableMessages * 30;
 const messageBoxWidth = 500;
 
+// Player skins
+const skins = [
+    null, // index 0 = no skin (default)
+    new Image(playerWidth, playerHeight), // index 1 = first skin
+    new Image(playerWidth, playerHeight), // index 2 = second skin
+    new Image(playerWidth, playerHeight)  // index 3 = third skin
+];
+
+// Load the skin images
+skins[1].src = "/assets/skins/skin1.png";
+skins[2].src = "/assets/skins/skin2.png";
+skins[3].src = "/assets/skins/skin3.png";
+
 // Maps 
 let maps = {};
 let currentMapData = null;
@@ -931,6 +944,25 @@ export class gameScene extends Scene {
             }
         });
 
+        client.on('flagsState', (data) => {
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
+            }
+            game.flags = data;
+        });
+
+        client.on('skinChange', (data) => {
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
+            }
+            const playerName = data.player;
+            const skinId = data.skin;
+            
+            if (game.players[playerName]) {
+                game.players[playerName].skin = skinId;
+            }
+        });
+
         client.on('announce', (message) => {
             this.announcementText = message;
             this.announcementTimer = 7; // 7 seconds
@@ -1085,7 +1117,8 @@ export class gameScene extends Scene {
                         // Submit message to server
                         if (client && this.messageField.text.trim() !== "") {
                             this.messageField.deactivate();
-                            client.emit('message', `${naem} said ${this.messageField.text}`);
+                            // Send message directly to server - all command processing happens server-side
+                            client.emit('message', `${naem} said ${this.messageField.text.trim()}`);
                             this.messageField.text = "";
                         }
                     }
@@ -1528,7 +1561,23 @@ export class gameScene extends Scene {
                     } else if (player.isOp) {
                         this.messageField.setMaxLength(100);
                     }
-                    ctx.drawRect(player.x, player.y, playerWidth, playerHeight, playerColor);
+                    
+                    // Draw the player
+                    if (player.skin && player.skin > 0 && skins[player.skin] && skins[player.skin].complete) {
+                        // Draw player with skin
+                        ctx.drawRect(player.x, player.y, playerWidth, playerHeight, playerColor);
+                        
+                        ctx.drawImage(
+                            skins[player.skin],
+                            player.x,
+                            player.y,
+                            playerWidth,
+                            playerHeight
+                        );
+                    } else {
+                        // Draw player as colored rectangle (default)
+                        ctx.drawRect(player.x, player.y, playerWidth, playerHeight, playerColor);
+                    }
                     
                     // Draw player name if it exists
                     if (player.name) {

@@ -4,11 +4,11 @@ A multiplayer capture the flag game built with [context-engine](https://github.c
 
 ## About
 
-This game is built using my custom TypeScript game engine. While there are many game engines available, none quite matched the features I was looking for. So I did what any reasonable developer would do - built my own engine held together with hopes and dreams! 
+This game is built using my custom TypeScript game engine. While there are many game engines available, none quite matched the features I was looking for. So I did what any reasonable developer would do - built my own engine! 
 
 ### Design Philosophy
 - Minimalist cubic player designs (intentional!)
-- Whatever I think goes into the game
+- Whatever I think goes into the game goes into the game
 
 ## Installation
 
@@ -46,7 +46,7 @@ firefox http://localhost:4566
 
 ## Future Plans
 - Stripe integration
-- Supporter cosmetics (like a special in-game shirt for $0.95)
+- Skins - Work In Progress, Avalible as operator with !op commands
 - Publishing context-engine as an npm package
 
 ## Current Status
@@ -60,3 +60,4 @@ Feel free to open issues, but just know pull requests will be outdated because I
 
 ## Playing the Game
 I recommend going into this blindly, figuring out things as you go. (hint: spacebar does something cool)
+But if you are really lost, check the [guide](./guide/basicguide.md).

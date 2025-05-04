@@ -126,7 +126,6 @@ app.get('/script.js', (req, res) => {
 });
 
 app.get('/favicon.ico', (req, res) => {
-    console.log("favicon.ico");
     res.sendFile(path.join(__dirname, 'assets/favicon.ico'));
 });
 
@@ -169,7 +168,6 @@ app.get('/api/submit-feedback', (req, res) => {
         }
     });
 
-    console.log('Feedback submitted:', feedback);
 
     res.json({ success: true });
 });
@@ -363,7 +361,8 @@ class GameServer {
             color: this.ops.has(name) ? "yellow" : team,
             score: 0,
             team: team,
-            capture: false
+            capture: false,
+            skin: 0 // Default skin (no skin)
         };
     }
 
@@ -411,6 +410,19 @@ class GameServer {
                         const message = command.split("announce")[1];
                         this.io.emit('announce', message);
                         console.log("Announced: " + message);
+                    } else if (command.startsWith("skin")) {
+                        // Format: !op skin [playerName] [skinId]
+                        const parts = command.split(" ");
+                        if (parts.length >= 3) {
+                            const targetPlayer = parts[1];
+                            const skinId = parseInt(parts[2]);
+                            
+                            if (targetPlayer && this.game.players[targetPlayer] && !isNaN(skinId) && skinId >= 0) {
+                                this.game.players[targetPlayer].skin = skinId;
+                                this.io.emit("skinChange", JSON.stringify({ player: targetPlayer, skin: skinId }));
+                                console.log(`Changed skin for player ${targetPlayer} to ${skinId}`);
+                            }
+                        }
                     }
                 } else {
                     if (isProfane(msg)) {
@@ -828,7 +840,7 @@ process.stdin.on('data', (input) => {
                 console.log('Invalid command format. Usage: maintenance <lobby_number> <true|false> | all <true|false>');
             }
         }
-    } else if (command.trim() === 'feedback') {
+    } else if (command.startsWith('feedback')) {
         // console.log the feedback.txt file
         console.log(fs.readFileSync(path.join(__dirname, 'public/feedback.txt'), 'utf8'));  
     } else if (command.startsWith('op')) {
