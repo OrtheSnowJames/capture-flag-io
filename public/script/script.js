@@ -6,6 +6,7 @@ import { gameScene, deadScene, goToDead } from "./game.js";
 
 export let naem = "";
 export let lobbyPath = "";
+export let privcode = "";
 let switched = false;
 let tips = [];
 export let engine = null;
@@ -100,6 +101,20 @@ class menuScene extends Scene {
             "Music Toggle"
         );
 
+        this.privateButton = new OCtxButton(
+            50, 250,
+            buttonWidth,
+            buttonHeight,
+            "Private Host"
+        );
+
+        this.privateJoinButton = new OCtxButton(
+            50, 350,
+            buttonWidth,
+            buttonHeight,
+            "Private Join"
+        );
+
         this.nameField.setPlaceholder("Enter your name");
     }
 
@@ -111,7 +126,8 @@ class menuScene extends Scene {
       this.nameField.update(commands, dt);
       this.backButton.update(commands);
       this.musicButton.update(commands);
-      
+      this.privateButton.update(commands);
+      this.privateJoinButton.update(commands);
       // Update title animation using deltaTime
       this.titleAnimationTime += dt;
       // Use sine wave to oscillate between 40 and 50, with proper time scaling
@@ -125,8 +141,12 @@ class menuScene extends Scene {
         musicPlay = !musicPlay;
         titleMusic.muted = !musicPlay;
       }
+
+      if (this.privateJoinButton.isClicked(commands)) {
+        commands.switchScene(3);
+      }
   
-      if (!this.startButton.isClicked(commands)) return;
+      if (!this.startButton.isClicked(commands) && !this.privateButton.isClicked(commands)) return;
   
       const entered = this.nameField.getText().trim();
       if (!entered) {
@@ -141,33 +161,66 @@ class menuScene extends Scene {
       }
   
       this.#loading = true;      // lock until we finish
-      (async () => {
-        try {
-          const { path } = await fetch(`/lobby`).then(r => r.json());
-          lobbyPath = path;
-  
-          const response = await fetch(
-            `/check-name?name=${encodeURIComponent(entered)}&lobby=${lobbyPath}`
-          ).then(r => r.json());
-  
-          if (!response.available) {
-            const errorMessage = response.reason || "Name already taken";
-            namefieldPlaceholderError(errorMessage, this.nameField);
+      if (this.startButton.isClicked(commands)) {
+        console.log("not private");
+        (async () => {
+          try {
+            const { path } = await fetch(`/lobby`).then(r => r.json());
+            lobbyPath = path;
+    
+            const response = await fetch(
+              `/check-name?name=${encodeURIComponent(entered)}&lobby=${lobbyPath}`
+            ).then(r => r.json());
+    
+            if (!response.available) {
+              const errorMessage = response.reason || "Name already taken";
+              namefieldPlaceholderError(errorMessage, this.nameField);
+              this.#loading = false;
+              return;
+            }
+    
+            naem = entered;
+            this.nameField.deactivate();
+            commands.switchScene(1);
+            titleMusic.pause();
+            switched = true;
+          } catch (err) {
+            console.error(err);
+            namefieldPlaceholderError("Server error – try again", this.nameField);
             this.#loading = false;
-            return;
           }
-  
-          naem = entered;
-          this.nameField.deactivate();
-          commands.switchScene(1);
-          titleMusic.pause();
-          switched = true;
-        } catch (err) {
-          console.error(err);
-          namefieldPlaceholderError("Server error – try again", this.nameField);
-          this.#loading = false;
-        }
-      })();                      // immediately‑invoked async function
+        })();                      // immediately‑invoked async function
+      } else {
+        console.log("private");
+        (async () => {
+          try {
+            const { path, privcodee } = await fetch(`/lobby/newlobby`).then(r => r.json());
+            lobbyPath = path;
+            await console.log(lobbyPath);
+            privcode = privcodee;
+            // check name
+            const response = await fetch(
+              `/check-name?name=${encodeURIComponent(entered)}&lobby=${lobbyPath}`
+            ).then(r => r.json());
+
+            if (!response.available) {
+              namefieldPlaceholderError("Name already taken", this.nameField);
+              this.#loading = false;
+              return;
+            }
+
+            naem = entered;
+            this.nameField.deactivate();
+            commands.switchScene(1);
+            titleMusic.pause();
+            switched = true;
+          } catch (err) {
+            console.error(err);
+            namefieldPlaceholderError("Server error – try again", this.nameField);
+            this.#loading = false;
+          }
+        })();
+      }
     }
 
     draw(ctx) {
@@ -202,6 +255,8 @@ class menuScene extends Scene {
         this.nameField.draw(ctx);
         this.backButton.draw(ctx);
         this.musicButton.draw(ctx);
+        this.privateButton.draw(ctx);
+        this.privateJoinButton.draw(ctx);
         // draw a check/x near the button
         ctx.drawText(
             this.musicButton.bounds.x + this.musicButton.bounds.width / 5,
@@ -211,6 +266,74 @@ class menuScene extends Scene {
             20
         );
     }
+}
+
+class privateJoinScene extends Scene {
+  backButton = new OCtxButton(50, 200, 100, 50, "Back");
+  nameField = new OCtxTextField(CANVAS_WIDTH / 2 - 100, CANVAS_HEIGHT / 2 - 50, 200, 50, "Enter your name");
+  lobbyPathField = new OCtxTextField(CANVAS_WIDTH / 2 - 100, CANVAS_HEIGHT / 2 + 50, 200, 50, "Enter the lobby path");
+  startButton = new OCtxButton(CANVAS_WIDTH / 2 - 100, CANVAS_HEIGHT / 2 + 100, 200, 50, "Start");
+  constructor() {
+    super();
+    this.init();
+  }
+
+  init() {
+    this.nameField.setPlaceholder("Enter your name");
+    this.nameField.maxLength = 12;
+    this.lobbyPathField.setPlaceholder("Enter the lobby path");
+    this.lobbyPathField.maxLength = 12;
+  }
+
+  update(dt, commands) {
+    this.backButton.update(commands);
+    this.nameField.update(commands, dt);
+    this.lobbyPathField.update(commands, dt);
+    this.startButton.update(commands);
+    if (this.backButton.isClicked(commands)) {
+      commands.switchScene(0);
+    }
+
+    if (this.startButton.isClicked(commands)) {
+      (async () => {
+        try {
+          const path = await this.lobbyPathField.getText();
+          lobbyPath = path;
+  
+          const response = await fetch(
+            `/check-name?name=${encodeURIComponent(this.nameField.text)}&lobby=${lobbyPath}`
+          ).then(r => r.json());
+  
+          if (!response.available) {
+            const errorMessage = response.reason || "Name already taken";
+            namefieldPlaceholderError(errorMessage, this.nameField);
+            return;
+          }
+  
+          naem = this.nameField.text;
+          this.nameField.deactivate();
+          commands.switchScene(1);
+          titleMusic.pause();
+          switched = true;
+        } catch (err) {
+          console.error(err);
+          namefieldPlaceholderError("Server error – try again", this.nameField);
+        }
+      })();
+    }
+  }
+  
+  draw(ctx) {
+    ctx.setCamera(0, 0);
+    ctx.setZoom(1);
+    ctx.clearBackground('black');
+    ctx.drawImage(coverart, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.drawText("Private Join", 0, 0, "white", 50);
+    this.backButton.draw(ctx);
+    this.nameField.draw(ctx);
+    this.lobbyPathField.draw(ctx);
+    this.startButton.draw(ctx);
+  }
 }
 
 export class timeData {
@@ -320,7 +443,8 @@ export class timeData {
 let menuSceneObj = new menuScene();
 let gameSceneObj = new gameScene();
 let deadSceneObj = new deadScene();
+let privateJoinSceneObj = new privateJoinScene();
 
-let game = [menuSceneObj, gameSceneObj, deadSceneObj];
+let game = [menuSceneObj, gameSceneObj, deadSceneObj, privateJoinSceneObj];
 
 engine = contextEngine(game, 0, CANVAS_WIDTH, CANVAS_HEIGHT, true); // call the engine

@@ -189,6 +189,8 @@ class GameServer {
         this.timerRunning = false;
         this.inOvertime = false; // Track if the game is in overtime
         this.ops = new Set(); // Track op players
+        this.private = false;
+        this.reqDelete = false;
         this.game = {
             players: {},
             flags: {
@@ -596,9 +598,13 @@ class GameServer {
                     this.emitWithLogging('kill', JSON.stringify({ player: playerName, killer: "system" }));
                     
                     // If no players left, reset the timer and stop it
-                    if (this.count === 0) {
+                    if (this.count === 0 && !this.private) {
                         this.timestamp.setSeconds(5 * 60);
                         this.stopGameTimer();
+                    } else if (this.count === 0 && this.private) {
+                        // destroy the lobby
+                        this.maintenance = true;
+                        this.reqDelete = true;
                     }
                 }
             });
@@ -622,6 +628,13 @@ class GameServer {
     }
 }
 
+function configureLobby(lobby, privatee = false) {
+    const namespace = io.of(lobby.path); // Use the single `io` instance
+    lobby.server = new GameServer(namespace, lobbyCount++);
+    lobby.server.do();
+    lobby.server.private = privatee;
+}
+
 // Initialize namespaces for lobbies
 const lobbies = [
     { path: '/lobby1', server: null },
@@ -629,19 +642,24 @@ const lobbies = [
 ];
 
 lobbies.forEach((lobby) => {
-    const namespace = io.of(lobby.path); // Use the single `io` instance
-    lobby.server = new GameServer(namespace, lobbyCount++);
-    lobby.server.do();
+    configureLobby(lobby);
 });
 
 // REST APIs
 app.get('/lobby', (req, res) => {
-    const availableLobby = lobbies.find(lobby => lobby.server.count < 10 && !lobby.server.maintenance);
+    const availableLobby = lobbies.find(lobby => lobby.server.count < 10 && !lobby.server.maintenance && typeof lobby.privcode === 'undefined');
     if (availableLobby) {
         return res.json({ path: availableLobby.path });
     } else {
         return res.status(503).json({ message: 'All lobbies are full' });
     }
+
+    // go through lobbies and check if any are reqDelete
+    lobbies.forEach(lobby => {
+        if (lobby.server.reqDelete) {
+            lobbies.splice(lobbies.indexOf(lobby), 1);
+        }
+    });
 });
 
 app.get('/check-name', (req, res) => {
@@ -658,6 +676,29 @@ app.get('/check-name', (req, res) => {
     if (taken || isProfane(name)) return res.json({ available: false });
 
     return res.json({ available: true });
+});
+
+app.get('/lobby/newlobby', (req, res) => {
+    const lobby = { path: '/lobby' + lobbies.length + 1, server: null, privcode: Math.random().toString(36).substring(2, 15) };
+    configureLobby(lobby, true);
+    lobbies.push(lobby);
+    res.json({ path: lobby.path, privcode: lobby.privcode }); // privcode will be used to configure the lobby
+});
+
+app.get('/lobby/deletelobby', (req, res) => {
+    const path = req.query.path;
+    const privcode = req.query.privcode;
+    const lobby = lobbies.find(l => l.path === path);
+    if (lobby && typeof lobby.privcode !== 'undefined') {
+        if (lobby.privcode === privcode) {
+            lobbies.splice(lobbies.indexOf(lobby), 1);
+            return res.json({ message: 'Lobby deleted' });
+        } else {
+            return res.status(401).json({ message: 'Invalid private code' });
+        }
+    } else {
+        return res.status(404).json({ message: 'Lobby not found' });
+    }
 });
 
 // Add stdin command handling

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { otherCtx, contextEngine, Commands, Scene, OCtxButton, OCtxTextField } from "./context-engine.mjs";
-import { naem, engine, lobbyPath, musicPlay, timeData, CANVAS_WIDTH, CANVAS_HEIGHT } from "./script.js";
+import { naem, engine, lobbyPath, musicPlay, timeData, privcode, CANVAS_WIDTH, CANVAS_HEIGHT } from "./script.js";
 
 // filepath: /home/james/Documents/capture-flag-io/node/public/script/game.js
 
