@@ -162,7 +162,7 @@ app.get('/api/submit-feedback', (req, res) => {
     const feedbackFile = path.join(__dirname, 'public/assets/feedback.txt');
 
     // Append the feedback to the file
-    fs.appendFile(feedbackFile, feedback + '\n ' + new Date().toISOString() + '\n', (err) => {
+    fs.appendFile(feedbackFile, feedback + '\n ' + new Date().toISOString() + '\n' + '\n', (err) => {
         if (err) {
             console.error('Error appending feedback:', err);
             return res.status(500).json({ error: 'Failed to submit feedback' });
