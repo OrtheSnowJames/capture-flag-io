@@ -38,6 +38,7 @@ function Task(fn) {
 }
 
 let lobbyCount = 0;
+let appOk = true;
 const playerWidth = 25;
 const playerHeight = 25;
 const flagWidth = 25;
@@ -647,19 +648,19 @@ lobbies.forEach((lobby) => {
 
 // REST APIs
 app.get('/lobby', (req, res) => {
-    const availableLobby = lobbies.find(lobby => lobby.server.count < 10 && !lobby.server.maintenance && typeof lobby.privcode === 'undefined');
-    if (availableLobby) {
-        return res.json({ path: availableLobby.path });
-    } else {
-        return res.status(503).json({ message: 'All lobbies are full' });
-    }
-
     // go through lobbies and check if any are reqDelete
     lobbies.forEach(lobby => {
         if (lobby.server.reqDelete) {
             lobbies.splice(lobbies.indexOf(lobby), 1);
         }
     });
+
+    const availableLobby = lobbies.find(lobby => lobby.server.count < 10 && !lobby.server.maintenance && typeof lobby.privcode === 'undefined');
+    if (availableLobby) {
+        return res.json({ path: availableLobby.path });
+    } else {
+        return res.status(503).json({ message: 'All lobbies are full' });
+    }
 });
 
 app.get('/check-name', (req, res) => {
@@ -698,6 +699,14 @@ app.get('/lobby/deletelobby', (req, res) => {
         }
     } else {
         return res.status(404).json({ message: 'Lobby not found' });
+    }
+});
+
+app.get('/healthz', (req, res) => {
+    if (appOk) {
+        res.status(200).send('OK');
+    } else {
+        res.status(500).send('NOT OK');
     }
 });
 
