@@ -547,6 +547,20 @@ let game = {
 let getClient = false;
 let sendName = false; 
 export class gameScene extends Scene {
+    // Define UI ratios
+    messageBoxWidthRatio = 0.3125; // 500/1600
+    messageBoxHeightRatio = 0.2625; // 210/800
+    messageFieldHeightRatio = 0.075; // 60/800
+    buttonWidthRatio = 0.0875; // 140/1600
+    buttonHeightRatio = 0.075; // 60/800
+    timerBoxWidthRatio = 0.09375; // 150/1600
+    timerBoxHeightRatio = 0.0625; // 50/800
+    messageFontSizeRatio = 0.025; // 20/800
+    timerFontSizeRatio = 0.025; // 20/800
+    announcementFontSizeRatio = 0.0375; // 30/800
+    voteFontSizeRatio = 0.025; // 20/800
+    voteTimerFontSizeRatio = 0.03; // 24/800
+
     messageField = new OCtxTextField(0, readableMessages * 30, 500, 60, Math.round(500/23));
     submitButton = new OCtxButton(520, readableMessages * 30, 100, 60, "Send");
     musicButton = new OCtxButton(50, messageBoxHeight + 140, 140, 60, "Music Mute");
@@ -567,8 +581,8 @@ export class gameScene extends Scene {
         this.timestamp = new timeData(5 * 60); // 5 minutes
         
         // Create buttons dynamically - we'll support up to 3 maps by default
-        const buttonWidth = 250;
-        const buttonHeight = 60;
+        const buttonWidth = CANVAS_WIDTH * 0.15625; // 250/1600
+        const buttonHeight = CANVAS_HEIGHT * 0.075; // 60/800
         const howManyButtons = 3; // how many buttons to display
         for (let i = 0; i < howManyButtons; i++) {
             const button = new OCtxButton(
@@ -584,6 +598,44 @@ export class gameScene extends Scene {
     }
 
     init() {
+        const messageBoxWidth = CANVAS_WIDTH * this.messageBoxWidthRatio;
+        const messageBoxHeight = CANVAS_HEIGHT * this.messageBoxHeightRatio;
+        const messageFieldHeight = CANVAS_HEIGHT * this.messageFieldHeightRatio;
+        const buttonWidth = CANVAS_WIDTH * this.buttonWidthRatio;
+        const buttonHeight = CANVAS_HEIGHT * this.buttonHeightRatio;
+
+        this.messageField = new OCtxTextField(
+            0,
+            messageBoxHeight,
+            messageBoxWidth,
+            messageFieldHeight,
+            Math.round(messageBoxWidth/23)
+        );
+
+        this.submitButton = new OCtxButton(
+            messageBoxWidth + CANVAS_WIDTH * 0.0125, // 20/1600
+            messageBoxHeight,
+            buttonWidth,
+            buttonHeight,
+            "Send"
+        );
+
+        this.musicButton = new OCtxButton(
+            CANVAS_WIDTH * 0.03125, // 50/1600
+            messageBoxHeight + CANVAS_HEIGHT * 0.175, // 140/800
+            buttonWidth,
+            buttonHeight,
+            "Music Mute"
+        );
+
+        this.backButton = new OCtxButton(
+            CANVAS_WIDTH * 0.03125, // 50/1600
+            messageBoxHeight + CANVAS_HEIGHT * 0.0875, // 70/800
+            buttonWidth,
+            buttonHeight,
+            "Back"
+        );
+
         this.messageField.setPlaceholder("Type a message");
     }
 
@@ -1354,7 +1406,7 @@ export class gameScene extends Scene {
 
         // Set camera position
         ctx.setZoom(2.5);
-        ctx.setCamera(game.players[naem].x - 255, game.players[naem].y - 155);
+        ctx.setCamera(game.players[naem].x - (CANVAS_WIDTH / 2) / 2.5, game.players[naem].y - (CANVAS_HEIGHT / 2) / 2.5);
         
         // Handle outer background (outbg)
         if (field.outbgIsImage && field.outbg instanceof Image && field.outbg.complete) {
@@ -1637,7 +1689,8 @@ export class gameScene extends Scene {
             });
 
             // Draw message box
-
+            const messageBoxWidth = CANVAS_WIDTH * this.messageBoxWidthRatio;
+            const messageBoxHeight = CANVAS_HEIGHT * this.messageBoxHeightRatio;
             ctx.drawRect(
                 0,
                 0,
@@ -1649,11 +1702,12 @@ export class gameScene extends Scene {
             );
 
             // Display messages from bottom to top (newest at bottom)
-            const displayMessages = [...game.messages].slice(-readableMessages); // Get last N messages
+            const displayMessages = [...game.messages].slice(-readableMessages);
+            const messageFontSize = CANVAS_HEIGHT * this.messageFontSizeRatio;
             for (let i = 0; i < displayMessages.length; i++) {
                 const message = displayMessages[i];
-                const messageY = (i + 1) * 30 - 10; // -10 to adjust text position vertically
-                ctx.drawText(5, messageY, message, "white", 20, false, false);
+                const messageY = (i + 1) * (messageBoxHeight / readableMessages) - 10;
+                ctx.drawText(5, messageY, message, "white", messageFontSize, false, false);
             }
 
             // UI
@@ -1661,22 +1715,27 @@ export class gameScene extends Scene {
             this.submitButton.draw(ctx, false, false);
             this.backButton.draw(ctx, false, false);
             this.musicButton.draw(ctx, false, false);
-            // draw a check/x near the button
+
+            // Draw music button indicator
             ctx.drawText(
                 this.musicButton.bounds.x + this.musicButton.bounds.width / 5,
                 this.musicButton.bounds.y + this.musicButton.bounds.height - 7,
                 newMusicPlay ? "✓" : "✗",
                 "black",
-                20,
-                false, false
+                messageFontSize,
+                false,
+                false
             );
-            // Draw Timer at the top center with black box
+
+            // Draw Timer
             if (!intermission) {
-                const timerBoxWidth = 150; // Made wider to accommodate OVERTIME text
-                const timerBoxHeight = 50;
+                const timerBoxWidth = CANVAS_WIDTH * this.timerBoxWidthRatio;
+                const timerBoxHeight = CANVAS_HEIGHT * this.timerBoxHeightRatio;
+                const timerFontSize = CANVAS_HEIGHT * this.timerFontSizeRatio;
+
                 ctx.drawRect(
                     CANVAS_WIDTH / 2 - timerBoxWidth / 2,
-                    10,
+                    CANVAS_HEIGHT * 0.0125, // 10/800
                     timerBoxWidth,
                     timerBoxHeight,
                     "black",
@@ -1685,34 +1744,34 @@ export class gameScene extends Scene {
                 );
                 ctx.setTextAlign("center");
                 
-                // Display OVERTIME or timer
                 if (isOvertime) {
                     ctx.drawText(
                         CANVAS_WIDTH / 2,
-                        10 + timerBoxHeight / 2,
+                        CANVAS_HEIGHT * 0.0125 + timerBoxHeight / 2,
                         "OVERTIME",
-                        "red", // Red color for emphasis
-                        20,
+                        "red",
+                        timerFontSize,
                         false,
                         false
                     );
                 } else {
                     ctx.drawText(
                         CANVAS_WIDTH / 2,
-                        10 + timerBoxHeight / 2,
+                        CANVAS_HEIGHT * 0.0125 + timerBoxHeight / 2,
                         this.timestamp.string(),
                         "white",
-                        20,
+                        timerFontSize,
                         false,
                         false
                     );
                 }
                 ctx.setTextAlign("left");
             } else {
-                // Draw the player who won at the top center with a black box and also team
-                const winnerBoxWidth = ctx.rawCtx().measureText(`${winners.player} (${winners.team})`).width + 20;
-                const winnerBoxHeight = 50;
-                // also draw big box half transparent but black
+                // Draw winner box
+                const winnerBoxWidth = ctx.rawCtx().measureText(`${winners.player} (${winners.team})`).width + CANVAS_WIDTH * 0.0125;
+                const winnerBoxHeight = CANVAS_HEIGHT * 0.0625; // 50/800
+                const winnerFontSize = CANVAS_HEIGHT * this.timerFontSizeRatio;
+
                 ctx.drawRect(
                     0,
                     0,
@@ -1721,91 +1780,114 @@ export class gameScene extends Scene {
                     "rgba(0, 0, 0, 0.5)",
                     false,
                     false
-                )
+                );
+
                 ctx.drawRect(
                     CANVAS_WIDTH / 2 - winnerBoxWidth / 2,
-                    10,
+                    CANVAS_HEIGHT * 0.0125,
                     winnerBoxWidth,
                     winnerBoxHeight,
                     "black",
                     false,
                     false 
                 );
+
                 ctx.setTextAlign("center");
                 ctx.drawText(
                     CANVAS_WIDTH / 2,
-                    10 + winnerBoxHeight / 2,
+                    CANVAS_HEIGHT * 0.0125 + winnerBoxHeight / 2,
                     `${winners.player} (${winners.team})`,
                     "white",
-                    20,
+                    winnerFontSize,
                     false,
                     false
-                )
+                );
+
                 ctx.setTextAlign("left");
+
                 if (winners.team === game.players[naem].team) {
-                    // Draw some selections
-                    ctx.drawText(CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.5, "Select a map", "white", 20, false, false);
-                    // Draw the map buttons dynamically based on available maps
+                    const voteFontSize = CANVAS_HEIGHT * this.voteFontSizeRatio;
+                    const voteTimerFontSize = CANVAS_HEIGHT * this.voteTimerFontSizeRatio;
+
+                    ctx.drawText(
+                        CANVAS_WIDTH / 2,
+                        CANVAS_HEIGHT * 0.5,
+                        "Select a map",
+                        "white",
+                        voteFontSize,
+                        false,
+                        false
+                    );
+
                     this.mapButtons.forEach((button, index) => {
                         if (index < mapSelection.length) {
                             button.label = mapSelection[index] || `Map ${index+1}`;
                             button.draw(ctx, false, false);
                         }
                     });
+
+                    let voteYPosition = CANVAS_HEIGHT * 0.5 + CANVAS_HEIGHT * 0.0625;
                     
-                    
-                    // Below the buttons, draw how much each map has been voted for
-                    let voteYPosition = CANVAS_HEIGHT * 0.5 + 50;
-                    
-                    // Display vote counts for all available maps
                     for (let i = 0; i < mapSelection.length; i++) {
                         const voteCount = mapVotes[mapSelection[i]] ? mapVotes[mapSelection[i]].length : 0;
                         ctx.drawText(
-                            CANVAS_WIDTH / 2, 
-                            voteYPosition, 
-                            `${mapSelection[i]}: ${voteCount} votes`, 
-                            "white", 
-                            20, 
-                            false, 
+                            CANVAS_WIDTH / 2,
+                            voteYPosition,
+                            `${mapSelection[i]}: ${voteCount} votes`,
+                            "white",
+                            voteFontSize,
+                            false,
                             false
                         );
-                        voteYPosition += 20;
+                        voteYPosition += CANVAS_HEIGHT * 0.025;
                     }
 
-                    // Draw voting timer at the top
                     if (votingActive) {
                         const timeLeft = Math.ceil(votingTimer);
                         const timerText = `Next map in: ${timeLeft} seconds`;
                         ctx.drawText(
-                            CANVAS_WIDTH / 2, 
-                            CANVAS_HEIGHT * 0.3, 
-                            timerText, 
-                            timeLeft <= 3 ? "red" : "white", 
-                            24, 
-                            false, 
+                            CANVAS_WIDTH / 2,
+                            CANVAS_HEIGHT * 0.3,
+                            timerText,
+                            timeLeft <= 3 ? "red" : "white",
+                            voteTimerFontSize,
+                            false,
                             false
                         );
                     }
                 } else {
-                    // Draw a button to wait for the next game
-                    ctx.drawText(CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.5, "Waiting for next game...", "white", 20, false, false);
+                    ctx.drawText(
+                        CANVAS_WIDTH / 2,
+                        CANVAS_HEIGHT * 0.5,
+                        "Waiting for next game...",
+                        "white",
+                        CANVAS_HEIGHT * this.voteFontSizeRatio,
+                        false,
+                        false
+                    );
                 }
             }
         }
 
         // Draw announcement overlay if active
         if (this.announcementActive) {
-            // Semi-transparent black background
-            ctx.drawRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, "rgba(0, 0, 0, 0.7)", false, false);
+            ctx.drawRect(
+                0,
+                0,
+                CANVAS_WIDTH,
+                CANVAS_HEIGHT,
+                "rgba(0, 0, 0, 0.7)",
+                false,
+                false
+            );
             
-            // Draw announcement text
             ctx.setTextAlign("center");
             ctx.drawText(
                 CANVAS_WIDTH / 2,
                 CANVAS_HEIGHT / 2,
                 this.announcementText,
                 "white",
-                30,
+                CANVAS_HEIGHT * this.announcementFontSizeRatio,
                 false,
                 false
             );
@@ -1825,10 +1907,29 @@ export class gameScene extends Scene {
 export class deadScene extends Scene {
     reason = "";
     showTechnicalDetails = false;
-    detailsButton = new OCtxButton(CANVAS_WIDTH / 2 - 150, CANVAS_HEIGHT * 0.4, 300, 60, "Show Technical Details");
+    // Define UI ratios
+    buttonWidthRatio = 0.1875; // 300/1600
+    buttonHeightRatio = 0.075; // 60/800
+    titleFontSizeRatio = 0.0625; // 50/800
+    subtitleFontSizeRatio = 0.0375; // 30/800
+    detailsFontSizeRatio = 0.0225; // 18/800
 
     constructor() {
         super();
+        this.init();
+    }
+
+    init() {
+        const buttonWidth = CANVAS_WIDTH * this.buttonWidthRatio;
+        const buttonHeight = CANVAS_HEIGHT * this.buttonHeightRatio;
+        
+        this.detailsButton = new OCtxButton(
+            CANVAS_WIDTH / 2 - buttonWidth / 2,
+            CANVAS_HEIGHT * 0.4,
+            buttonWidth,
+            buttonHeight,
+            "Show Technical Details"
+        );
     }
 
     async onLoad(commands) {
@@ -1855,9 +1956,25 @@ export class deadScene extends Scene {
         ctx.setZoom(1);
         ctx.clearBackground('black');
         
+        const titleFontSize = CANVAS_HEIGHT * this.titleFontSizeRatio;
+        const subtitleFontSize = CANVAS_HEIGHT * this.subtitleFontSizeRatio;
+        const detailsFontSize = CANVAS_HEIGHT * this.detailsFontSizeRatio;
+        
         // Main death message
-        ctx.drawText(CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166, CANVAS_HEIGHT * 0.1, "You are dead.", "white", 50);
-        ctx.drawText(CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166, CANVAS_HEIGHT * 0.2, "Press Enter to reload and pick a new name.", "white", 30);
+        ctx.drawText(
+            CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166,
+            CANVAS_HEIGHT * 0.1,
+            "You are dead.",
+            "white",
+            titleFontSize
+        );
+        ctx.drawText(
+            CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166,
+            CANVAS_HEIGHT * 0.2,
+            "Press Enter to reload and pick a new name.",
+            "white",
+            subtitleFontSize
+        );
         
         // Extract and display user-friendly reason
         let userFriendlyReason = "Unknown cause of death.";
@@ -1874,7 +1991,13 @@ export class deadScene extends Scene {
         }
         
         // Display user-friendly reason
-        ctx.drawText(CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166, CANVAS_HEIGHT * 0.3, userFriendlyReason, "white", 30);
+        ctx.drawText(
+            CANVAS_WIDTH / 2 - CANVAS_WIDTH * 0.166,
+            CANVAS_HEIGHT * 0.3,
+            userFriendlyReason,
+            "white",
+            subtitleFontSize
+        );
         
         // Draw the details button
         this.detailsButton.draw(ctx);
@@ -1883,7 +2006,13 @@ export class deadScene extends Scene {
         if (this.showTechnicalDetails && technicalDetails !== "") {
             const lines = technicalDetails.split('\n');
             for (let i = 0; i < lines.length; i++) {
-                ctx.drawText(20, CANVAS_HEIGHT * 0.5 + (i * 30), lines[i], "#aaaaaa", 18);
+                ctx.drawText(
+                    20,
+                    CANVAS_HEIGHT * 0.5 + (i * CANVAS_HEIGHT * 0.0375),
+                    lines[i],
+                    "#aaaaaa",
+                    detailsFontSize
+                );
             }
         }
     }
