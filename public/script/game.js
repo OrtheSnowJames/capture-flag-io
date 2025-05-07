@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { otherCtx, contextEngine, Commands, Scene, OCtxButton, OCtxTextField } from "./context-engine.mjs";
-import { naem, engine, lobbyPath, musicPlay, timeData, privcode, CANVAS_WIDTH, CANVAS_HEIGHT } from "./script.js";
-
+import { naem, engine, lobbyPath, musicPlay, privcode, CANVAS_WIDTH, CANVAS_HEIGHT } from "./script.js";
+import { timeData } from "./globals.js";
 // filepath: /home/james/Documents/capture-flag-io/node/public/script/game.js
 
 const PORT = 4566;
@@ -544,6 +544,13 @@ let game = {
     currentMap: "map1" // Default map
 };
 
+let bottomAnnouncement = {
+    header: "Capture the flag",
+    body: "Team Game",
+    active: true,
+    timer: new timeData(5)
+}
+
 let getClient = false;
 let sendName = false; 
 export class gameScene extends Scene {
@@ -638,6 +645,8 @@ export class gameScene extends Scene {
 
         this.messageField.setPlaceholder("Type a message");
     }
+
+
 
     setupListeners() {
         client.on('move', (data) => {
@@ -749,6 +758,8 @@ export class gameScene extends Scene {
             if (data.flag in game.flags) {
                 game.flags[data.flag].capturedBy = data.player;
             }
+
+            this.bottomAnnouncementSet("Flag Captured!", `by ${data.player}`);
         });
 
         client.on('flagDropped', (data) => {
@@ -815,6 +826,13 @@ export class gameScene extends Scene {
             if (game.players[data.player]) {
                 game.players[data.player].capture = false;
             }
+
+            // if this is a score, show a score
+            if (data.scoredBy) {
+                this.bottomAnnouncementSet("Team Scored!", `by ${data.scoredBy}, for ${game.players[data.scoredBy].team}`);
+            } else {
+                this.bottomAnnouncementSet("Flag Returned.", `by ${data.player}`);
+            }
         });
 
         client.on('scoreUp', (data) => {
@@ -831,6 +849,8 @@ export class gameScene extends Scene {
                     game.players[data.player].score = (game.players[data.player].score || 0) + 1;
                 }
             }
+
+            this.bottomAnnouncementSet("Score Updated!", `${data.player} now has ${data.score} points`);
         });
 
         client.on('gameState', (data) => {
@@ -1081,6 +1101,13 @@ export class gameScene extends Scene {
         }
     }
 
+    bottomAnnouncementSet(header, body) {
+        bottomAnnouncement.header = header;
+        bottomAnnouncement.body = body;
+        bottomAnnouncement.active = true;
+        bottomAnnouncement.timer.setSeconds(5);
+    }
+
     resetGame() {
         muteBGM(true); // Mute BGM when resetting game
         game = {
@@ -1181,6 +1208,17 @@ export class gameScene extends Scene {
 
                     if (commands.keys['Escape'] && this.messageField.isActive) {
                         this.messageField.deactivate();
+                    }
+
+                    if (bottomAnnouncement.active) {
+                        bottomAnnouncement.timer.setSeconds(bottomAnnouncement.timer.seconds() - deltaTime);
+                        if (bottomAnnouncement.timer.seconds() <= 0) {
+                            bottomAnnouncement.active = false;
+                        }
+                    }
+
+                    if (bottomAnnouncement.timer.seconds() <= 0) {
+                        bottomAnnouncement.active = false;
                     }
 
                     // Update all map buttons
@@ -1888,6 +1926,39 @@ export class gameScene extends Scene {
                 this.announcementText,
                 "white",
                 CANVAS_HEIGHT * this.announcementFontSizeRatio,
+                false,
+                false
+            );
+            ctx.setTextAlign("left");
+        }
+        
+        // Draw bottom announcement if active
+        if (bottomAnnouncement.active) {
+            ctx.drawRect(
+                0,
+                CANVAS_HEIGHT - (CANVAS_HEIGHT / 4),
+                CANVAS_WIDTH,
+                CANVAS_HEIGHT / 4,
+                "rgba(0, 0, 0, 0.7)",
+                false,
+                false
+            );
+            ctx.setTextAlign("center");
+            ctx.drawText(
+                CANVAS_WIDTH / 2,
+                CANVAS_HEIGHT - (CANVAS_HEIGHT / 5) + CANVAS_HEIGHT * 0.05,
+                bottomAnnouncement.header,
+                "yellow",
+                CANVAS_HEIGHT * (this.announcementFontSizeRatio * 2),
+                false,
+                false
+            );
+            ctx.drawText(
+                CANVAS_WIDTH / 2,
+                CANVAS_HEIGHT - (CANVAS_HEIGHT / 5) + CANVAS_HEIGHT * 0.1,
+                bottomAnnouncement.body,
+                "#ccad58",
+                CANVAS_HEIGHT * (this.announcementFontSizeRatio),
                 false,
                 false
             );

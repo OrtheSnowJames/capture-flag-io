@@ -98,7 +98,7 @@ app.use(express.static('public'));
 app.use(express.json());
 
 app.use(cors({
-    origin: 'http://localhost:8080', // Update to match your Flutter Web origin
+    origin: 'http://localhost:4566', 
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Origin', 'X-Requested-With', 'Accept'],
 }));
@@ -123,6 +123,10 @@ app.use('/assets', express.static(path.join(__dirname, 'public/assets')));
 // Routes
 app.get('/script.js', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/script/script.js'));
+});
+
+app.get('/globals.js', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public/script/globals.js'));
 });
 
 app.get('/favicon.ico', (req, res) => {
@@ -563,14 +567,13 @@ class GameServer {
                     }
 
                     const ownFlag = this.game.flags[player.team];
-                    if (!ownFlag.capturedBy && 
+                    if (ownFlag.capturedBy && 
                         Math.abs(player.x - ownFlag.x) < 20 && 
                         Math.abs(player.y - ownFlag.y) < 20) {
                         ownFlag.x = player.team === "red" ? 100 : 900;
                         ownFlag.y = 250;
                         this.game.flags[player.team] = ownFlag;
                         this.emitWithLogging('flagReturned', JSON.stringify({ player: player.name, flag: ownFlag.team }));
-                        // this.emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }));
                     }
 
                     if (player.capture) {
@@ -584,8 +587,7 @@ class GameServer {
                         flag.capturedBy = "";
                         flag.x = flag.team === "red" ? 100 : 900;
                         flag.y = 250;
-                        this.emitWithLogging('flagReturned', JSON.stringify({ player: player.name, flag: flag.team }));
-                        // this.emitWithLogging('flagMoved', JSON.stringify({ player: player.name, flag: ownFlag.team, x: ownFlag.x, y: ownFlag.y }))
+                        this.emitWithLogging('flagReturned', JSON.stringify({ player: player.name, flag: flag.team, scoredBy: player.name }));
                     }
                     this.io.emit('move', JSON.stringify(data));
                 }
