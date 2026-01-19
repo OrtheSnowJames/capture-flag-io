@@ -25,9 +25,11 @@ setTimeout(() => {
   tips[Math.floor(Math.random() * tips.length)] : 
   "Pro tip: Wait for tips to load!";
 }, 300);
-
-export const CANVAS_WIDTH = 1400;
-export const CANVAS_HEIGHT = 700;
+const dwidth = window.innerWidth * 0.90;  // 100% - 5% left - 5% right
+const dheight = window.innerHeight * 0.90;
+export const CANVAS_WIDTH = dwidth;
+export const CANVAS_HEIGHT = dheight;
+console.log(CANVAS_WIDTH, CANVAS_HEIGHT);
 export let musicPlay = false;
 musicPlay = true;
 const PORT = 4566;
@@ -126,6 +128,7 @@ class menuScene extends Scene {
         );
 
         this.nameField.setPlaceholder("Enter your name");
+        this.nameField.text = "jeff";
     }
 
     update(dt, commands) {

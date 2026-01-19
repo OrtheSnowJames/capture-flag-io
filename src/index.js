@@ -194,6 +194,7 @@ class GameServer {
         this.ops = new Set(); // Track op players
         this.private = false;
         this.reqDelete = false;
+        this.socketMeta = new Map();
         this.game = {
             players: {},
             flags: {
@@ -453,6 +454,7 @@ class GameServer {
                 }
                 const team = this.reds < this.blues ? "red" : "blue";
                 team === "red" ? this.reds++ : this.blues++;
+                this.socketMeta.set(socket.id, { name, team });
 
                 // if the count was 0, start the game timer
                 if (this.count === 0) {
@@ -506,6 +508,7 @@ class GameServer {
                         flag.y = player.y;
                         this.emitWithLogging('flagDropped', JSON.stringify({ player: player.name, flag: player.team === "red" ? "blue" : "red" }));
                     }
+                    delete this.game.players[player.name];
 
                     // If no players left, reset the timer and stop it
                     if (this.count === 0) {
@@ -513,6 +516,30 @@ class GameServer {
                         this.stopGameTimer();
                     }
                 }
+            });
+
+            socket.on('respawn', () => {
+                const meta = this.socketMeta.get(socket.id);
+                if (!meta || !meta.name || !meta.team) return;
+
+                const { name, team } = meta;
+                if (this.game.players[name]) return;
+
+                const player = this.createPlayer(name, socket.id, team);
+                this.game.players[name] = player;
+                team === "red" ? this.reds++ : this.blues++;
+
+                this.emitWithLogging('newPlayer', JSON.stringify(player));
+
+                Object.values(this.game.players).forEach(player => {
+                    if (this.ops.has(player.name)) {
+                        player.isOp = true;
+                    } else {
+                        player.isOp = false;
+                    }
+                });
+
+                socket.emit('gameState', JSON.stringify(this.game));
             });
 
             socket.on('move', (data) => {
@@ -595,6 +622,7 @@ class GameServer {
 
             socket.on('disconnect', () => {
                 console.log(`A user disconnected from ${this.io.name}`);
+                this.socketMeta.delete(socket.id);
                 const playerName = Object.keys(this.game.players).find(name => this.game.players[name].id === socket.id);
                 if (playerName) {
                     const team = this.game.players[playerName].team;
