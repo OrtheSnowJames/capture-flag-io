@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 import { naem } from "../../../script.js";
 import { state } from "../../state.js";
+import { GamePhase, PlayerLife } from "../../enums.js";
+import { fadeBGMTo } from "../../assets.js";
 import { readableMessages } from "../../constants.js";
 import { timeData } from "../../../globals.js";
 
@@ -51,31 +53,28 @@ export function setupNetworkListeners(scene) {
     });
 
     state.client.on('newPlayer', (data) => {
-        if (!state.initialized) {
-            setTimeout(() => {
-                if (typeof data === 'string') {
-                    data = JSON.parse(data);
-                }
-                if (data.name === naem) return;
-                data.prevX = data.x;
-                data.prevY = data.y;
-                data.targetX = data.x;
-                data.targetY = data.y;
-                data.interpolationTime = 0;
-                state.game.players[data.name] = data;
-            }, 100);
-            return;
-        }
-
         if (!data) return;
-        if (data.name === naem) return;
         if (typeof data === 'string') {
             data = JSON.parse(data);
         }
-        data.targetX = data.x;
-        data.targetY = data.y;
-        data.interpolationTime = 0;
-        state.game.players[data.name] = data;
+        if (data.name === naem) return;
+
+        const assignPlayer = () => {
+            if (!data || !data.name) return;
+            data.prevX = data.x;
+            data.prevY = data.y;
+            data.targetX = data.x;
+            data.targetY = data.y;
+            data.interpolationTime = 0;
+            state.game.players[data.name] = data;
+        };
+
+        if (!state.initialized) {
+            setTimeout(assignPlayer, 100);
+            return;
+        }
+
+        assignPlayer();
     });
 
     state.client.on('kill', (data) => {
@@ -83,19 +82,19 @@ export function setupNetworkListeners(scene) {
             data = JSON.parse(data);
         }
 
-        if (state.game.players[data.player]) {
-            delete state.game.players[data.player];
-        }
+        const isLocalPlayer = data.player === naem;
 
-        if (state.game.players[data.player]?.name === naem) {
-            state.dead = true;
+        if (isLocalPlayer) {
+            state.life = PlayerLife.DEAD;
             state.spectatorTargetName = null;
             state.spectatorTargetIndex = 0;
             scene.messageField.setValue("");
             scene.messageField.deactivate();
-            if (scene.commands) {
-                scene.commands.switchScene(2);
-            }
+            fadeBGMTo(0);
+        }
+
+        if (state.game.players[data.player]) {
+            delete state.game.players[data.player];
         }
     });
 
@@ -194,8 +193,10 @@ export function setupNetworkListeners(scene) {
             data = JSON.parse(data);
         }
 
-        Object.keys(data.players).forEach(playerName => {
-            const player = data.players[playerName];
+        const { items, projectiles, smokeClouds, explosions, ...gameData } = data;
+
+        Object.keys(gameData.players).forEach(playerName => {
+            const player = gameData.players[playerName];
             player.prevX = player.x;
             player.prevY = player.y;
             player.targetX = player.x;
@@ -203,8 +204,8 @@ export function setupNetworkListeners(scene) {
             player.interpolationTime = 0;
         });
 
-        Object.keys(data.flags).forEach(flagName => {
-            const flag = data.flags[flagName];
+        Object.keys(gameData.flags).forEach(flagName => {
+            const flag = gameData.flags[flagName];
             flag.prevX = flag.x;
             flag.prevY = flag.y;
             flag.targetX = flag.x;
@@ -212,14 +213,44 @@ export function setupNetworkListeners(scene) {
             flag.interpolationTime = 0;
         });
 
-        if (data.currentMap) {
-            state.game.currentMap = data.currentMap;
+        if (gameData.currentMap) {
+            state.game.currentMap = gameData.currentMap;
         } else {
-            data.currentMap = state.game.currentMap;
+            gameData.currentMap = state.game.currentMap;
         }
 
-        state.game = data;
+        state.game = gameData;
+        state.items = items || [];
+        state.projectiles = projectiles || [];
+        state.smokeClouds = smokeClouds || [];
+        state.explosions = explosions || [];
         state.initialized = true;
+    });
+
+    state.client.on('worldUpdate', (data) => {
+        if (typeof data === 'string') {
+            data = JSON.parse(data);
+        }
+        if (data.items) {
+            const localHeld = state.items.find(item => item.state === "held" && item.heldBy === naem);
+            state.items = data.items.map(item => {
+                if (localHeld && item.id === localHeld.id && item.heldBy === naem) {
+                    return { ...item, orbitAngle: localHeld.orbitAngle };
+                }
+                return item;
+            });
+        }
+        if (data.projectiles) {
+            state.projectiles = data.projectiles;
+            const serverClientIds = new Set(data.projectiles.map(projectile => projectile.clientId).filter(Boolean));
+            state.localProjectiles = state.localProjectiles.filter(projectile => !serverClientIds.has(projectile.clientId));
+        }
+        if (data.smokeClouds) {
+            state.smokeClouds = data.smokeClouds;
+        }
+        if (data.explosions) {
+            state.explosions = data.explosions;
+        }
     });
 
     state.client.on('connect', () => {
@@ -257,10 +288,7 @@ export function setupNetworkListeners(scene) {
         if (data.currentMap) {
             state.game.currentMap = data.currentMap;
             console.log(`Map changed to: ${data.currentMap}`);
-
-            state.intermission = false;
-            state.votingActive = false;
-            state.isOvertime = false;
+            state.phase = GamePhase.GAME;
 
             scene.timestamp = new timeData(5 * 60);
 
@@ -272,16 +300,18 @@ export function setupNetworkListeners(scene) {
     state.client.on('timerUpdate', (timeString) => {
         if (state.initialized) {
             if (timeString === "OVERTIME") {
-                state.isOvertime = true;
+                state.phase = GamePhase.OVERTIME;
             } else {
-                state.isOvertime = false;
+                if (state.phase !== GamePhase.INTERMISSION && state.phase !== GamePhase.VOTING) {
+                    state.phase = GamePhase.GAME;
+                }
                 scene.timestamp.setFromString(timeString);
             }
         }
     });
 
     state.client.on('overtimeStarted', (message) => {
-        state.isOvertime = true;
+        state.phase = GamePhase.OVERTIME;
 
         if (state.game.messages) {
             state.game.messages.push("OVERTIME: " + message);
@@ -297,13 +327,11 @@ export function setupNetworkListeners(scene) {
         }
         state.winners.player = data.winner;
         state.winners.team = data.teamwinner;
-        state.intermission = true;
-        state.isOvertime = false;
+        state.phase = GamePhase.VOTING;
 
         scene.timestamp = new timeData(5 * 60);
 
         state.votingTimer = 10;
-        state.votingActive = true;
 
         const maps = data.maps;
         if (!Array.isArray(maps) || maps.length === 0) return;
@@ -353,5 +381,10 @@ export function setupNetworkListeners(scene) {
         scene.announcementText = message;
         scene.announcementTimer = 7;
         scene.announcementActive = true;
+    });
+
+    state.client.on('kicked', () => {
+        scene.resetGame();
+        window.location.href = "/";
     });
 }

@@ -2,6 +2,7 @@
 import { OCtxButton, OCtxTextField } from "../../../context-engine.mjs";
 import { CANVAS_WIDTH, CANVAS_HEIGHT, naem } from "../../../script.js";
 import { state } from "../../state.js";
+import { GamePhase, isIntermissionPhase } from "../../enums.js";
 import { readableMessages, messageBoxHeight, dashCooldown } from "../../constants.js";
 import { muteBGM } from "../../assets.js";
 
@@ -232,9 +233,6 @@ export function updateUI(scene, commands, deltaTime) {
 }
 
 export function drawHUD(scene, ctx) {
-    if (state.dead) {
-        return;
-    }
 
     const messageBoxWidth = CANVAS_WIDTH * scene.messageBoxWidthRatio;
     const messageBoxHeight = CANVAS_HEIGHT * scene.messageBoxHeightRatio;
@@ -271,7 +269,7 @@ export function drawHUD(scene, ctx) {
         false
     );
 
-    if (scene.isMobile && !state.intermission) {
+    if (scene.isMobile && !isIntermissionPhase(state.phase)) {
         Object.values(scene.mobileButtons).forEach(button => {
             if (button) button.draw(ctx, false, false);
         });
@@ -291,7 +289,7 @@ export function drawHUD(scene, ctx) {
         }
     }
 
-    if (!state.intermission) {
+    if (!isIntermissionPhase(state.phase)) {
         const timerBoxWidth = CANVAS_WIDTH * scene.timerBoxWidthRatio;
         const timerBoxHeight = CANVAS_HEIGHT * scene.timerBoxHeightRatio;
         const timerFontSize = CANVAS_HEIGHT * scene.timerFontSizeRatio;
@@ -307,7 +305,7 @@ export function drawHUD(scene, ctx) {
         );
         ctx.setTextAlign("center");
 
-        if (state.isOvertime) {
+        if (state.phase === GamePhase.OVERTIME) {
             ctx.drawText(
                 CANVAS_WIDTH / 2,
                 CANVAS_HEIGHT * 0.0125 + timerBoxHeight / 2,
@@ -404,7 +402,7 @@ export function drawHUD(scene, ctx) {
                 voteYPosition += CANVAS_HEIGHT * 0.025;
             }
 
-            if (state.votingActive) {
+            if (state.phase === GamePhase.VOTING) {
                 const timeLeft = Math.ceil(state.votingTimer);
                 const timerText = `Next map in: ${timeLeft} seconds`;
                 ctx.drawText(

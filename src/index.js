@@ -38,6 +38,7 @@ function Task(fn) {
 }
 
 let lobbyCount = 0;
+let nextLobbyId = 1;
 let appOk = true;
 const playerWidth = 25;
 const playerHeight = 25;
@@ -50,6 +51,15 @@ const filter = new Filter();
 
 const fieldWidth = 1000;
 const fieldHeight = 500;
+const grenadeThrowSpeed = 400;
+const grenadeSmokeDurationMs = 10000;
+const grenadePickupRadius = 30;
+const grenadeSpawnPerBase = 3;
+const fragGrenadeSpawnPerBase = 2;
+const fragKillRadius = 45;
+const explosionDurationMs = 1000;
+const grenadeProjectileRadius = 8;
+const grenadeMinSpawnDistance = 60;
 
 function checkCollision(x1, y1, w1, h1, x2, y2, w2, h2) {
     return x1 < x2 + w2 &&
@@ -195,6 +205,16 @@ class GameServer {
         this.private = false;
         this.reqDelete = false;
         this.socketMeta = new Map();
+        this.items = [];
+        this.projectiles = [];
+        this.smokeClouds = [];
+        this.explosions = [];
+        this.nextItemId = 1;
+        this.nextProjectileId = 1;
+        this.nextSmokeId = 1;
+        this.nextExplosionId = 1;
+        this.lastWorldTick = Date.now();
+        this.worldInterval = null;
         this.game = {
             players: {},
             flags: {
@@ -204,6 +224,8 @@ class GameServer {
             messages: [],
             currentMap: "map1" // Default map
         };
+        this.spawnGrenades();
+        this.startWorldLoop();
     }
 
     startGameTimer() {
@@ -328,6 +350,7 @@ class GameServer {
 
     kickPlayer(playerName) {
         if (this.game.players[playerName]) {
+            const socketId = this.game.players[playerName].id;
             if (this.game.players[playerName].team === "red") {
                 this.reds--;
             } else {
@@ -336,6 +359,9 @@ class GameServer {
             delete this.game.players[playerName];
             this.count--;
             this.emitWithLogging('kill', JSON.stringify({ player: playerName, killer: "system" }));
+            if (socketId) {
+                this.io.to(socketId).emit('kicked');
+            }
         }
     }
 
@@ -371,6 +397,181 @@ class GameServer {
         };
     }
 
+    spawnGrenade(baseX, baseY, type = "smoke") {
+        let x = baseX;
+        let y = baseY;
+        for (let i = 0; i < 10; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const radius = grenadeMinSpawnDistance + Math.random() * 80;
+            x = Math.min(fieldWidth - 10, Math.max(10, baseX + Math.cos(angle) * radius));
+            y = Math.min(fieldHeight - 10, Math.max(10, baseY + Math.sin(angle) * radius));
+            const dx = x - baseX;
+            const dy = y - baseY;
+            if (Math.hypot(dx, dy) >= grenadeMinSpawnDistance) {
+                break;
+            }
+        }
+        this.items.push({
+            id: this.nextItemId++,
+            type,
+            x,
+            y,
+            state: "ground",
+            heldBy: null,
+            orbitAngle: 0
+        });
+    }
+
+    spawnGrenades() {
+        this.items = [];
+        for (let i = 0; i < grenadeSpawnPerBase; i++) {
+            this.spawnGrenade(this.game.flags.red.x, this.game.flags.red.y, "smoke");
+            this.spawnGrenade(this.game.flags.blue.x, this.game.flags.blue.y, "smoke");
+        }
+        for (let i = 0; i < fragGrenadeSpawnPerBase; i++) {
+            this.spawnGrenade(this.game.flags.red.x, this.game.flags.red.y, "frag");
+            this.spawnGrenade(this.game.flags.blue.x, this.game.flags.blue.y, "frag");
+        }
+    }
+
+    startWorldLoop() {
+        if (this.worldInterval) return;
+        this.lastWorldTick = Date.now();
+        this.worldInterval = setInterval(() => {
+            const now = Date.now();
+            const deltaMs = now - this.lastWorldTick;
+            this.lastWorldTick = now;
+            this.updateWorld(deltaMs);
+        }, 50);
+    }
+
+    updateWorld(deltaMs) {
+        const deltaSec = deltaMs / 1000;
+
+        if (this.projectiles.length > 0) {
+            const remaining = [];
+            for (const projectile of this.projectiles) {
+                projectile.x += projectile.vx * deltaSec;
+                projectile.y += projectile.vy * deltaSec;
+
+                let detonated = false;
+                for (const player of Object.values(this.game.players)) {
+                    if (!player) continue;
+                    const hit = checkCollision(
+                        projectile.x - grenadeProjectileRadius,
+                        projectile.y - grenadeProjectileRadius,
+                        grenadeProjectileRadius * 2,
+                        grenadeProjectileRadius * 2,
+                        player.x,
+                        player.y,
+                        playerWidth,
+                        playerHeight
+                    );
+                    if (hit) {
+                        detonated = true;
+                        projectile.x = player.x;
+                        projectile.y = player.y;
+                        break;
+                    }
+                }
+                if (projectile.x < 0 || projectile.x > fieldWidth || projectile.y < 0 || projectile.y > fieldHeight) {
+                    detonated = true;
+                } else {
+                    const dx = projectile.targetX - projectile.x;
+                    const dy = projectile.targetY - projectile.y;
+                    if (Math.hypot(dx, dy) <= 10) {
+                        detonated = true;
+                    }
+                }
+
+                if (detonated) {
+                    this.detonateProjectile(projectile, projectile.x, projectile.y);
+                } else {
+                    remaining.push(projectile);
+                }
+            }
+            this.projectiles = remaining;
+        }
+
+        if (this.smokeClouds.length > 0) {
+            const now = Date.now();
+            this.smokeClouds = this.smokeClouds.filter(cloud => cloud.expiresAt > now);
+        }
+        if (this.explosions.length > 0) {
+            const now = Date.now();
+            this.explosions = this.explosions.filter(explosion => explosion.expiresAt > now);
+        }
+
+        this.emitWorldState(false);
+    }
+
+    emitWorldState(log = false) {
+        this.emitWithLogging('worldUpdate', JSON.stringify({
+            items: this.items,
+            projectiles: this.projectiles,
+            smokeClouds: this.smokeClouds,
+            explosions: this.explosions
+        }), log);
+    }
+
+    detonateProjectile(projectile, x, y) {
+        if (projectile.type === "frag") {
+            this.explosions.push({
+                id: this.nextExplosionId++,
+                x,
+                y,
+                expiresAt: Date.now() + explosionDurationMs
+            });
+
+            Object.values(this.game.players).forEach(player => {
+                const dx = player.x - x;
+                const dy = player.y - y;
+                if (Math.hypot(dx, dy) <= fragKillRadius) {
+                    this.dropHeldItems(player);
+                    this.emitWithLogging('kill', JSON.stringify({ player: player.name, killer: projectile.owner || "system" }));
+                    if (player.capture) {
+                        const flag = this.game.flags[player.team];
+                        flag.capturedBy = "";
+                        flag.x = player.x;
+                        flag.y = player.y;
+                        this.emitWithLogging('flagDropped', JSON.stringify({ player: player.name, flag: player.team === "red" ? "blue" : "red" }));
+                    }
+                    if (player.team === "red") {
+                        this.reds--;
+                    } else {
+                        this.blues--;
+                    }
+                    delete this.game.players[player.name];
+                }
+            });
+        } else {
+            this.smokeClouds.push({
+                id: this.nextSmokeId++,
+                x,
+                y,
+                expiresAt: Date.now() + grenadeSmokeDurationMs
+            });
+        }
+
+        setTimeout(() => {
+            const base = Math.random() < 0.5 ? this.game.flags.red : this.game.flags.blue;
+            this.spawnGrenade(base.x, base.y, projectile.type || "smoke");
+            this.emitWorldState(false);
+        }, 2000);
+    }
+
+    dropHeldItems(player) {
+        if (!player) return;
+        this.items.forEach(item => {
+            if (item.state === "held" && item.heldBy === player.name) {
+                item.state = "ground";
+                item.heldBy = null;
+                item.x = player.x;
+                item.y = player.y;
+            }
+        });
+    }
+
     changeMap(mapName) {
         if (mapName && typeof mapName === 'string') {
             this.game.currentMap = mapName;
@@ -379,6 +580,8 @@ class GameServer {
             console.log(`Map changed to: ${mapName}`);
             this.maintenance = false;
             this.timestamp.setSeconds(5 * 60);
+            this.spawnGrenades();
+            this.emitWorldState(false);
             this.startGameTimer();
         }
     }
@@ -477,7 +680,13 @@ class GameServer {
                     }
                 });
 
-                socket.emit('gameState', JSON.stringify(this.game));
+                socket.emit('gameState', JSON.stringify({
+                    ...this.game,
+                    items: this.items,
+                    projectiles: this.projectiles,
+                    smokeClouds: this.smokeClouds,
+                    explosions: this.explosions
+                }));
                 console.log("gameState", this.game);
                 console.log("flags", this.game.flags);
             });
@@ -508,6 +717,7 @@ class GameServer {
                         flag.y = player.y;
                         this.emitWithLogging('flagDropped', JSON.stringify({ player: player.name, flag: player.team === "red" ? "blue" : "red" }));
                     }
+                    this.dropHeldItems(player);
                     delete this.game.players[player.name];
 
                     // If no players left, reset the timer and stop it
@@ -539,7 +749,96 @@ class GameServer {
                     }
                 });
 
-                socket.emit('gameState', JSON.stringify(this.game));
+                socket.emit('gameState', JSON.stringify({
+                    ...this.game,
+                    items: this.items,
+                    projectiles: this.projectiles,
+                    smokeClouds: this.smokeClouds,
+                    explosions: this.explosions
+                }));
+            });
+
+            socket.on('itemPickup', (data) => {
+                if (typeof data === 'string') data = JSON.parse(data);
+                const meta = this.socketMeta.get(socket.id);
+                if (!meta || !meta.name) return;
+                const player = this.game.players[meta.name];
+                if (!player) return;
+
+                if (this.items.some(it => it.state === "held" && it.heldBy === meta.name)) {
+                    return;
+                }
+
+                const item = this.items.find(it => it.id === data.itemId);
+                if (!item || item.state !== "ground") return;
+
+                const dx = item.x - player.x;
+                const dy = item.y - player.y;
+                if (Math.hypot(dx, dy) > grenadePickupRadius) return;
+
+                item.state = "held";
+                item.heldBy = meta.name;
+                item.orbitAngle = 0;
+
+                this.emitWorldState(false);
+            });
+
+            socket.on('itemOrbit', (data) => {
+                if (typeof data === 'string') data = JSON.parse(data);
+                const meta = this.socketMeta.get(socket.id);
+                if (!meta || !meta.name) return;
+                const item = this.items.find(it => it.id === data.itemId);
+                if (!item || item.state !== "held" || item.heldBy !== meta.name) return;
+
+                if (typeof data.angle === "number") {
+                    item.orbitAngle = data.angle;
+                    this.emitWorldState(false);
+                }
+            });
+
+            socket.on('itemThrow', (data) => {
+                if (typeof data === 'string') data = JSON.parse(data);
+                const meta = this.socketMeta.get(socket.id);
+                if (!meta || !meta.name) return;
+                const player = this.game.players[meta.name];
+                if (!player) return;
+
+                const itemIndex = this.items.findIndex(it => it.id === data.itemId);
+                if (itemIndex === -1) return;
+                const item = this.items[itemIndex];
+                if (item.state !== "held" || item.heldBy !== meta.name) return;
+
+                const dx = data.targetX - player.x;
+                const dy = data.targetY - player.y;
+                const dist = Math.max(1, Math.hypot(dx, dy));
+                const vx = (dx / dist) * grenadeThrowSpeed;
+                const vy = (dy / dist) * grenadeThrowSpeed;
+
+                this.projectiles.push({
+                    id: this.nextProjectileId++,
+                    clientId: data.clientId ?? null,
+                    type: item.type,
+                    owner: meta.name,
+                    x: player.x,
+                    y: player.y,
+                    vx,
+                    vy,
+                    targetX: data.targetX,
+                    targetY: data.targetY
+                });
+
+                this.items.splice(itemIndex, 1);
+                this.emitWorldState(false);
+            });
+
+            socket.on('itemDetonate', (data) => {
+                if (typeof data === 'string') data = JSON.parse(data);
+                const projectileIndex = this.projectiles.findIndex(proj => proj.id === data.projectileId);
+                if (projectileIndex === -1) return;
+                const projectile = this.projectiles[projectileIndex];
+                this.projectiles.splice(projectileIndex, 1);
+                this.detonateProjectile(projectile, data.x ?? projectile.x, data.y ?? projectile.y);
+                this.emitWorldState(false);
             });
 
             socket.on('move', (data) => {
@@ -556,6 +855,7 @@ class GameServer {
                             } else {
                                 this.blues--;
                             }
+                            this.dropHeldItems(player);
                             this.emitWithLogging('kill', JSON.stringify({ player: player.name, killer: "system" }));
                             delete this.game.players[player.name];
                         }
@@ -568,6 +868,7 @@ class GameServer {
                             player.score += (otherPlayer.score !== 0 ? otherPlayer.score : 1);
                             this.emitWithLogging('scoreUp', JSON.stringify({ player: player.name, score: player.score }));
                             
+                            this.dropHeldItems(otherPlayer);
                             delete this.game.players[name];
                             if (otherPlayer.team === "red") {
                                 this.reds--;
@@ -625,6 +926,7 @@ class GameServer {
                 this.socketMeta.delete(socket.id);
                 const playerName = Object.keys(this.game.players).find(name => this.game.players[name].id === socket.id);
                 if (playerName) {
+                    this.dropHeldItems(this.game.players[playerName]);
                     const team = this.game.players[playerName].team;
                     team === "red" ? this.reds-- : this.blues--;
 
@@ -669,6 +971,15 @@ class GameServer {
         this.handleGameOver();
         return true;
     }
+
+    shutdown() {
+        this.stopGameTimer();
+        if (this.worldInterval) {
+            clearInterval(this.worldInterval);
+            this.worldInterval = null;
+        }
+        this.io.disconnectSockets(true);
+    }
 }
 
 function configureLobby(lobby, privatee = false) {
@@ -678,30 +989,50 @@ function configureLobby(lobby, privatee = false) {
     lobby.server.private = privatee;
 }
 
-// Initialize namespaces for lobbies
-const lobbies = [
-    { path: '/lobby1', server: null },
-    { path: '/lobby2', server: null },
-];
-
-lobbies.forEach((lobby) => {
+function createPublicLobby() {
+    const lobby = { path: `/lobby${nextLobbyId++}`, server: null };
     configureLobby(lobby);
-});
+    lobbies.push(lobby);
+    return lobby;
+}
+
+function cleanupEmptyPublicLobbies() {
+    for (let i = lobbies.length - 1; i >= 0; i--) {
+        const lobby = lobbies[i];
+        const hasNoSockets = lobby.server && lobby.server.io && lobby.server.io.sockets && lobby.server.io.sockets.size === 0;
+        if (lobby.server && lobby.server.count === 0 && hasNoSockets && typeof lobby.privcode === 'undefined') {
+            lobby.server.shutdown();
+            lobbies.splice(i, 1);
+        }
+    }
+}
+
+// Initialize namespaces for lobbies
+const lobbies = [];
+createPublicLobby();
+createPublicLobby();
+
+setInterval(() => {
+    cleanupEmptyPublicLobbies();
+}, 30000);
 
 // REST APIs
 app.get('/lobby', (req, res) => {
+    cleanupEmptyPublicLobbies();
     // go through lobbies and check if any are reqDelete
-    lobbies.forEach(lobby => {
-        if (lobby.server.reqDelete) {
-            lobbies.splice(lobbies.indexOf(lobby), 1);
+    for (let i = lobbies.length - 1; i >= 0; i--) {
+        if (lobbies[i].server.reqDelete) {
+            lobbies[i].server.shutdown();
+            lobbies.splice(i, 1);
         }
-    });
+    }
 
     const availableLobby = lobbies.find(lobby => lobby.server.count < 10 && !lobby.server.maintenance && typeof lobby.privcode === 'undefined');
     if (availableLobby) {
         return res.json({ path: availableLobby.path });
     } else {
-        return res.status(503).json({ message: 'All lobbies are full' });
+        const newLobby = createPublicLobby();
+        return res.json({ path: newLobby.path });
     }
 });
 
@@ -722,7 +1053,7 @@ app.get('/check-name', (req, res) => {
 });
 
 app.get('/lobby/newlobby', (req, res) => {
-    const lobby = { path: '/lobby' + lobbies.length + 1, server: null, privcode: Math.random().toString(36).substring(2, 15) };
+    const lobby = { path: `/lobby${nextLobbyId++}`, server: null, privcode: Math.random().toString(36).substring(2, 15) };
     configureLobby(lobby, true);
     lobbies.push(lobby);
     res.json({ path: lobby.path, privcode: lobby.privcode }); // privcode will be used to configure the lobby
@@ -734,6 +1065,7 @@ app.get('/lobby/deletelobby', (req, res) => {
     const lobby = lobbies.find(l => l.path === path);
     if (lobby && typeof lobby.privcode !== 'undefined') {
         if (lobby.privcode === privcode) {
+            lobby.server.shutdown();
             lobbies.splice(lobbies.indexOf(lobby), 1);
             return res.json({ message: 'Lobby deleted' });
         } else {
@@ -829,7 +1161,7 @@ process.stdin.on('data', (input) => {
         // emit a kill event to all players
         lobbies.forEach((lobby) => {
             Object.values(lobby.server.game.players).forEach((player) => {
-                this.emitWithLogging('kill', JSON.stringify({ player: player.name, killer: "system" }));
+                lobby.server.kickPlayer(player.name);
             });
         });
         server.close(() => {
@@ -849,7 +1181,10 @@ process.stdin.on('data', (input) => {
                 const lobby = lobbies[lobbyNumber - 1];
                 if (lobby && lobby.server) {
                     lobby.server.kickPlayer(playerName);
+                    console.log(`Kicked player ${playerName} from lobby ${lobbyNumber}`);
                 }
+            } else {
+                console.log('Invalid lobby number. Usage: kick <lobby_number> <player_name>');
             }
         }
     } else if (command.startsWith('maintenance')) {
@@ -923,7 +1258,7 @@ server.listen(PORT, () => {
 });
 
 process.on('SIGINT', () => {
-    console.log('SIGINT signal received. Exiting server in 10 seconds...');
+    console.log('SIGINT signal received. Exiting server in 3 seconds...');
     lobbies.forEach((lobby) => {
         Object.values(lobby.server.game.players).forEach((player) => {
             Task(async () => {
@@ -932,11 +1267,11 @@ process.on('SIGINT', () => {
         });
     });
     
-    // Set a timeout to forcefully exit after 10 seconds
+    // Set a timeout to forcefully exit after 3 seconds
     setTimeout(() => {
-        console.log('Forcefully exiting after 10 seconds...');
+        console.log('Forcefully exiting after 3 seconds...');
         process.exit(0);
-    }, 10000);
+    }, 3000);
 
     // Try to close the server gracefully
     server.close(() => {

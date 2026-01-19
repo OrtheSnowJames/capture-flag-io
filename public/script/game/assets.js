@@ -29,10 +29,15 @@ export const audio = {
     }
 };
 
+let fadeRequestId = null;
+
 export function startBGM() {
     const currentMap = state.game.currentMap;
     if (audio.maps[currentMap] && audio.maps[currentMap].bgm) {
         audio.maps[currentMap].bgm.loop = true;
+        if (typeof audio.maps[currentMap].bgm.volume !== "number") {
+            audio.maps[currentMap].bgm.volume = 1;
+        }
         audio.maps[currentMap].bgm.play().catch(e => console.log("BGM play failed:", e));
     }
 }
@@ -43,4 +48,34 @@ export function muteBGM(mute) {
             map.bgm.muted = mute;
         }
     });
+}
+
+export function fadeBGMTo(targetVolume, durationMs = 700) {
+    if (fadeRequestId) {
+        cancelAnimationFrame(fadeRequestId);
+        fadeRequestId = null;
+    }
+
+    const firstMap = Object.values(audio.maps).find(map => map.bgm);
+    const startVolume = firstMap && typeof firstMap.bgm.volume === "number" ? firstMap.bgm.volume : 1;
+    const clampedTarget = Math.max(0, Math.min(1, targetVolume));
+    const startTime = performance.now();
+
+    const step = (now) => {
+        const elapsed = now - startTime;
+        const t = Math.min(1, durationMs > 0 ? elapsed / durationMs : 1);
+        const volume = startVolume + (clampedTarget - startVolume) * t;
+        Object.values(audio.maps).forEach(map => {
+            if (map.bgm) {
+                map.bgm.volume = volume;
+            }
+        });
+        if (t < 1) {
+            fadeRequestId = requestAnimationFrame(step);
+        } else {
+            fadeRequestId = null;
+        }
+    };
+
+    fadeRequestId = requestAnimationFrame(step);
 }

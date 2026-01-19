@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: MIT
+
+// FILE NOT USED
+
 import { Scene, OCtxButton } from "../../context-engine.mjs";
 import { CANVAS_WIDTH, CANVAS_HEIGHT, engine, naem } from "../../script.js";
 import { state } from "../state.js";
+import { PlayerLife } from "../enums.js";
+import { fadeBGMTo } from "../assets.js";
+import { drawWorld } from "./gameScene/renderWorld.js";
+import { tickSpectator } from "./gameScene/update.js";
 
 export class deadScene extends Scene {
     buttonWidthRatio = 0.16;
@@ -60,7 +67,8 @@ export class deadScene extends Scene {
 
     async onLoad(commands) {
         this.commands = commands;
-        state.dead = true;
+        state.life = PlayerLife.DEAD;
+        fadeBGMTo(0);
         this.syncSpectatorTarget(true);
     }
     async onExit(commands) {}
@@ -101,6 +109,10 @@ export class deadScene extends Scene {
 
     update(deltaTime, commands) {
         this.syncSpectatorTarget(false);
+        const gameScene = engine?.scenes?.[1];
+        if (gameScene) {
+            tickSpectator(gameScene, deltaTime);
+        }
         this.leftButton.update(commands);
         this.rightButton.update(commands);
         this.respawnButton.update(commands);
@@ -118,7 +130,8 @@ export class deadScene extends Scene {
             if (state.client) {
                 state.client.emit('respawn', JSON.stringify({ name: naem }));
             }
-            state.dead = false;
+            state.life = PlayerLife.ALIVE;
+            fadeBGMTo(state.newMusicPlay ? 1 : 0);
             state.spectatorTargetName = null;
             state.spectatorTargetIndex = 0;
             commands.switchScene(1);
@@ -134,13 +147,11 @@ export class deadScene extends Scene {
     }
 
     draw(ctx) {
-        ctx.setCamera(0, 0);
-        ctx.setZoom(1);
-        ctx.clearBackground('black');
+        this.syncSpectatorTarget(false);
 
         const gameScene = engine?.scenes?.[1];
-        if (gameScene && gameScene.draw) {
-            gameScene.draw(ctx);
+        if (gameScene) {
+            drawWorld(gameScene, ctx);
         }
 
         ctx.setCamera(0, 0);

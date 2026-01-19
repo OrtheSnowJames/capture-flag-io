@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { timeData } from "../globals.js";
 import { fieldWidth, fieldHeight } from "./constants.js";
+import { GamePhase, PlayerLife } from "./enums.js";
 
 export let goToDead = true;
 
@@ -8,7 +9,7 @@ export const state = {
     initialized: false,
     client: null,
     newMusicPlay: null,
-    intermission: false,
+    phase: GamePhase.GAME,
     winners: { player: "", team: "" },
     mapSelection: [],
     votedFor: "",
@@ -19,14 +20,26 @@ export const state = {
     lastMovementUpdate: 0,
     playerMessages: {},
     votingTimer: 10,
-    votingActive: false,
-    isOvertime: false,
+    // phase tracks intermission/voting/game/overtime
     dashCooldownRemaining: 0,
     dashActive: false,
     dashTimeRemaining: 0,
     spectatorTargetName: null,
     spectatorTargetIndex: 0,
-    dead: false,
+    life: PlayerLife.ALIVE,
+    items: [],
+    projectiles: [],
+    smokeClouds: [],
+    explosions: [],
+    pendingPickupItemId: null,
+    lastOrbitUpdateTime: 0,
+    lastHoverItemId: null,
+    lastHoverLogTime: 0,
+    lastHeldItemId: null,
+    lastPickupRequestItemId: null,
+    lastPickupRequestTime: 0,
+    localProjectiles: [],
+    nextClientProjectileId: 1,
     game: {
         players: {},
         flags: {

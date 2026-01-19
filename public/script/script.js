@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { otherCtx, contextEngine, Commands, Scene, OCtxButton, OCtxTextField } from "./context-engine.mjs";
-import { gameScene, deadScene, goToDead } from "./game.js";
+import { gameScene } from "./game.js";
 
 // filepath: /home/james/Documents/capture-flag-io/node/public/script/script.js
 
@@ -70,7 +70,6 @@ class menuScene extends Scene {
     }
 
     async onLoad(commands) {
-        goToDead = true;
     }
 
     init() {
@@ -156,7 +155,7 @@ class menuScene extends Scene {
         }
 
         if (this.privateJoinButton.isClicked(commands)) {
-            commands.switchScene(3);
+            commands.switchScene(2);
         }
   
         let startButtonClicked = this.startButton.isClicked(commands);
@@ -409,9 +408,8 @@ class privateJoinScene extends Scene {
 
 let menuSceneObj = new menuScene();
 let gameSceneObj = new gameScene();
-let deadSceneObj = new deadScene();
 let privateJoinSceneObj = new privateJoinScene();
 
-let game = [menuSceneObj, gameSceneObj, deadSceneObj, privateJoinSceneObj];
+let game = [menuSceneObj, gameSceneObj, privateJoinSceneObj];
 
 engine = contextEngine(game, 0, CANVAS_WIDTH, CANVAS_HEIGHT, true); // call the engine
