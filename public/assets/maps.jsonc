@@ -202,5 +202,141 @@
         ],
         "bg": "#2e3138",
         "outbg": "#181a1f"
+    },
+    "map4": {
+        "name": "citadel complex (intriguing!)",
+        "objects": [
+            {
+                "type": "rect",
+                "x": "canvasWidth / 2 - 95",
+                "y": "canvasHeight / 2 - 95",
+                "width": "190",
+                "height": "190",
+                "color": "#2B2F3A",
+                "collide": "outside"
+            },
+            {
+                "type": "rect",
+                "x": "canvasWidth / 2 - 260",
+                "y": "canvasHeight / 2 - 18",
+                "width": "520",
+                "height": "36",
+                "color": "#4A5263",
+                "collide": "outside"
+            },
+            {
+                "type": "rect",
+                "x": "canvasWidth / 2 - 18",
+                "y": "canvasHeight / 2 - 145",
+                "width": "36",
+                "height": "290",
+                "color": "#4A5263",
+                "collide": "outside"
+            },
+            {
+                "type": "rect",
+                "x": "185",
+                "y": "85",
+                "width": "120",
+                "height": "28",
+                "color": "#5D667A",
+                "collide": "outside"
+            },
+            {
+                "type": "rect",
+                "x": "185",
+                "y": "canvasHeight - 113",
+                "width": "120",
+                "height": "28",
+                "color": "#5D667A",
+                "collide": "outside"
+            },
+            {
+                "type": "rect",
+                "x": "canvasWidth - 305",
+                "y": "85",
+                "width": "120",
+                "height": "28",
+                "color": "#5D667A",
+                "collide": "outside"
+            },
+            {
+                "type": "rect",
+                "x": "canvasWidth - 305",
+                "y": "canvasHeight - 113",
+                "width": "120",
+                "height": "28",
+                "color": "#5D667A",
+                "collide": "outside"
+            },
+            {
+                "type": "rect",
+                "x": "95",
+                "y": "canvasHeight / 2 + 30",
+                "width": "70",
+                "height": "60",
+                "color": "rgba(255, 95, 95, 0.35)",
+                "property": {
+                    "teamblock": "red"
+                }
+            },
+            {
+                "type": "rect",
+                "x": "canvasWidth - 165",
+                "y": "canvasHeight / 2 + 30",
+                "width": "70",
+                "height": "60",
+                "color": "rgba(95, 125, 255, 0.35)",
+                "property": {
+                    "teamblock": "blue"
+                }
+            },
+            {
+                "type": "rect",
+                "x": "130",
+                "y": "130",
+                "width": "56",
+                "height": "28",
+                "color": "rgba(255, 210, 90, 0.5)",
+                "property": {
+                    "dashpad": true
+                }
+            },
+            {
+                "type": "rect",
+                "x": "130",
+                "y": "canvasHeight - 158",
+                "width": "56",
+                "height": "28",
+                "color": "rgba(255, 210, 90, 0.5)",
+                "property": {
+                    "dashpad": true
+                }
+            },
+            {
+                "type": "rect",
+                "x": "canvasWidth - 186",
+                "y": "130",
+                "width": "56",
+                "height": "28",
+                "color": "rgba(255, 210, 90, 0.5)",
+                "property": {
+                    "dashpad": true
+                }
+            },
+            {
+                "type": "rect",
+                "x": "canvasWidth - 186",
+                "y": "canvasHeight - 158",
+                "width": "56",
+                "height": "28",
+                "color": "rgba(255, 210, 90, 0.5)",
+                "property": {
+                    "dashpad": true
+                }
+            }
+        ],
+        "bg": "#242A35",
+        "outbg": "#10141C"
     }
 }

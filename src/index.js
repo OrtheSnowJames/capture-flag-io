@@ -60,6 +60,7 @@ const fragKillRadius = 45;
 const explosionDurationMs = 1000;
 const grenadeProjectileRadius = 8;
 const grenadeMinSpawnDistance = 60;
+const DEFAULT_MAP = "map4";
 
 function checkCollision(x1, y1, w1, h1, x2, y2, w2, h2) {
     return x1 < x2 + w2 &&
@@ -118,6 +119,14 @@ function checkSpeed(x, y, newx, newy, topSpeed = 425) {
     }
 
     return false;
+}
+
+function parseRoundTimeToSeconds(input) {
+    const match = String(input || "").trim().match(/^(\d{1,3}):([0-5]\d)$/);
+    if (!match) return null;
+    const minutes = parseInt(match[1], 10);
+    const seconds = parseInt(match[2], 10);
+    return (minutes * 60) + seconds;
 }
 
 // Middleware setup
@@ -254,7 +263,7 @@ class GameServer {
                 blue: this.createFlag("blue"),
             },
             messages: [],
-            currentMap: "map1" // Default map
+            currentMap: DEFAULT_MAP
         };
         this.spawnGrenades();
         this.startWorldLoop();
@@ -686,6 +695,19 @@ class GameServer {
                                 this.io.emit("skinChange", JSON.stringify({ player: targetPlayer, skin: skinId }));
                                 console.log(`Changed skin for player ${targetPlayer} to ${skinId}`);
                             }
+                        }
+                    } else if (command.startsWith("time")) {
+                        // Format: !op time M:SS
+                        const timeArg = command.split(" ")[1];
+                        const seconds = parseRoundTimeToSeconds(timeArg);
+                        if (seconds === null) {
+                            socket.emit('message', `[System.Log] says Invalid time format. Use !op time M:SS (example: 4:59 or 1:00)`);
+                        } else {
+                            this.inOvertime = false;
+                            this.timestamp.setSeconds(seconds);
+                            this.io.emit('timerUpdate', this.timestamp.string());
+                            console.log(`Operator ${player.name} set lobby ${this.lobby} timer to ${this.timestamp.string()}`);
+                            this.io.emit('message', `[System.Log] says Timer set to ${this.timestamp.string()} by ${player.name}`);
                         }
                     }
                 } else {
