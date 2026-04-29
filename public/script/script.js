@@ -31,7 +31,6 @@ export const CANVAS_WIDTH = dwidth;
 export const CANVAS_HEIGHT = dheight;
 console.log(CANVAS_WIDTH, CANVAS_HEIGHT);
 export let musicPlay = false;
-musicPlay = true;
 const PORT = 4566;
 let coverart = new Image();
 coverart.src = "/assets/coverart.png";

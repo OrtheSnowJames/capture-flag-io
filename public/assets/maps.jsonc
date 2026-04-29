@@ -124,5 +124,83 @@
                 }
             }
         ]
+    },
+    "map3": {
+        "name": "crossfire",
+        "objects": [
+            {
+                "type": "rect",
+                "x": "canvasWidth / 2 - 70",
+                "y": "canvasHeight / 2 - 70",
+                "width": "140",
+                "height": "140",
+                "color": "#3f3f3f",
+                "collide": "outside"
+            },
+            {
+                "type": "rect",
+                "x": "canvasWidth / 2 - 175",
+                "y": "canvasHeight / 2 - 15",
+                "width": "350",
+                "height": "30",
+                "color": "#5a5a5a",
+                "collide": "outside"
+            },
+            {
+                "type": "rect",
+                "x": "canvasWidth / 2 - 15",
+                "y": "canvasHeight / 2 - 140",
+                "width": "30",
+                "height": "280",
+                "color": "#5a5a5a",
+                "collide": "outside"
+            },
+            {
+                "type": "rect",
+                "x": "130",
+                "y": "canvasHeight / 2 - 35",
+                "width": "70",
+                "height": "70",
+                "color": "rgba(255, 80, 80, 0.35)",
+                "property": {
+                    "teamblock": "red"
+                }
+            },
+            {
+                "type": "rect",
+                "x": "canvasWidth - 200",
+                "y": "canvasHeight / 2 - 35",
+                "width": "70",
+                "height": "70",
+                "color": "rgba(80, 120, 255, 0.35)",
+                "property": {
+                    "teamblock": "blue"
+                }
+            },
+            {
+                "type": "rect",
+                "x": "280",
+                "y": "85",
+                "width": "80",
+                "height": "35",
+                "color": "rgba(255, 210, 80, 0.45)",
+                "property": {
+                    "dashpad": true
+                }
+            },
+            {
+                "type": "rect",
+                "x": "canvasWidth - 360",
+                "y": "canvasHeight - 120",
+                "width": "80",
+                "height": "35",
+                "color": "rgba(255, 210, 80, 0.45)",
+                "property": {
+                    "dashpad": true
+                }
+            }
+        ],
+        "bg": "#2e3138",
+        "outbg": "#181a1f"
     }
 }

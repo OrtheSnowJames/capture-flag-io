@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-import { naem, CANVAS_WIDTH, CANVAS_HEIGHT } from "../../../script.js";
+import { naem } from "../../../script.js";
 import { state } from "../../state.js";
 import {
     moveSpeed,
@@ -8,17 +8,15 @@ import {
     dashCooldown,
     movementUpdateRate,
     MESSAGE_DISPLAY_DURATION,
-    flagHeight,
-    CAMERA_ZOOM,
-    GRENADE_PICKUP_RADIUS,
-    GRENADE_PROJECTILE_RADIUS
+    flagHeight
 } from "../../constants.js";
 import { parseMap } from "../../maps.js";
 import { predictMove, canMove, checkPlayerOnDashpad } from "../../movement.js";
-import { lerp, checkCollision } from "../../utils.js";
+import { lerp } from "../../utils.js";
 import { startBGM, muteBGM } from "../../assets.js";
 import { updateUI } from "./ui.js";
 import { GamePhase, isIntermissionPhase, isPlayingPhase } from "../../enums.js";
+import { handleGrenades, handleProjectileCollisions, updateLocalProjectiles } from "../../grenades.js";
 
 function updatePlayerInterpolations(deltaTime, includeLocal) {
     Object.keys(state.game.players).forEach(playerName => {
@@ -54,139 +52,6 @@ function updateFlagInterpolations(deltaTime) {
             }
         }
     });
-}
-
-function getWorldCursorPosition(commands) {
-    const player = state.game.players[naem];
-    const cameraX = player.x - (CANVAS_WIDTH / 2) / CAMERA_ZOOM;
-    const cameraY = player.y - (CANVAS_HEIGHT / 2) / CAMERA_ZOOM;
-    const worldX = commands?.mouseX !== undefined
-        ? (commands.mouseX / CAMERA_ZOOM) + cameraX
-        : player.x;
-    const worldY = commands?.mouseY !== undefined
-        ? (commands.mouseY / CAMERA_ZOOM) + cameraY
-        : player.y;
-    return { worldX, worldY };
-}
-
-function handleGrenades(scene, commands) {
-    if (!state.items || !state.items.length) return;
-
-    const player = state.game.players[naem];
-    if (!player) return;
-
-    if (state.pendingPickupItemId) {
-        const pendingItem = state.items.find(item => item.id === state.pendingPickupItemId);
-        if (!pendingItem || pendingItem.state !== "ground") {
-            state.pendingPickupItemId = null;
-        }
-    }
-
-    const heldItem = state.items.find(item => item.state === "held" && item.heldBy === naem);
-    if (heldItem && state.lastHeldItemId !== heldItem.id) {
-        state.lastHeldItemId = heldItem.id;
-        console.log(`[grenade] picked up item ${heldItem.id}`);
-    }
-    if (!heldItem && state.lastHeldItemId !== null) {
-        state.lastHeldItemId = null;
-    }
-    if (!heldItem) {
-        let hoveredItem = null;
-        let hoveredDistance = Infinity;
-        for (const item of state.items) {
-            if (item.state !== "ground") continue;
-            const dx = item.x - player.x;
-            const dy = item.y - player.y;
-            const distance = Math.hypot(dx, dy);
-            if (distance <= GRENADE_PICKUP_RADIUS && distance < hoveredDistance) {
-                hoveredItem = item;
-                hoveredDistance = distance;
-            }
-        }
-
-        const hoveredItemId = hoveredItem ? hoveredItem.id : null;
-        if (hoveredItemId !== state.lastHoverItemId) {
-            state.lastHoverItemId = hoveredItemId;
-            if (hoveredItemId !== null) {
-                console.log(`[grenade] hover item ${hoveredItemId}`);
-            }
-        }
-
-        if (!hoveredItem) {
-            state.pendingPickupItemId = null;
-            return;
-        }
-
-        const now = performance.now();
-        const isSameItem = state.lastPickupRequestItemId === hoveredItem.id;
-        if (state.pendingPickupItemId !== hoveredItem.id || !isSameItem || now - state.lastPickupRequestTime > 800) {
-            state.pendingPickupItemId = hoveredItem.id;
-            state.lastPickupRequestItemId = hoveredItem.id;
-            state.lastPickupRequestTime = now;
-            console.log(`[grenade] pickup request for item ${hoveredItem.id}`);
-            state.client?.emit('itemPickup', JSON.stringify({ itemId: hoveredItem.id }));
-        }
-        return;
-    }
-
-    state.pendingPickupItemId = null;
-
-    const { worldX, worldY } = getWorldCursorPosition(commands);
-    const angle = Math.atan2(worldY - player.y, worldX - player.x);
-    heldItem.orbitAngle = angle;
-
-    const now = performance.now();
-    if (now - state.lastOrbitUpdateTime > 150) {
-        state.lastOrbitUpdateTime = now;
-        state.client?.emit('itemOrbit', JSON.stringify({ itemId: heldItem.id, angle }));
-    }
-
-    if (commands && commands.mouseReleased && !scene.messageField?.isActive) {
-        console.log(`[grenade] throw item ${heldItem.id} to ${worldX.toFixed(1)},${worldY.toFixed(1)}`);
-        const dx = worldX - player.x;
-        const dy = worldY - player.y;
-        const dist = Math.max(1, Math.hypot(dx, dy));
-        const speed = 400;
-        const vx = (dx / dist) * speed;
-        const vy = (dy / dist) * speed;
-        const clientId = state.nextClientProjectileId++;
-
-        state.localProjectiles.push({
-            clientId,
-            type: heldItem.type,
-            x: player.x,
-            y: player.y,
-            vx,
-            vy,
-            spawnTime: performance.now()
-        });
-        state.items = state.items.filter(item => item.id !== heldItem.id);
-
-        state.client?.emit('itemThrow', JSON.stringify({ itemId: heldItem.id, targetX: worldX, targetY: worldY, clientId }));
-    }
-}
-
-function handleProjectileCollisions() {
-    if (!state.projectiles || state.projectiles.length === 0) return;
-
-    for (const projectile of state.projectiles) {
-        for (const obj of state.mapObjects) {
-            if (obj.collideType !== 'outside') continue;
-            const hit = checkCollision(
-                {
-                    x: projectile.x - GRENADE_PROJECTILE_RADIUS,
-                    y: projectile.y - GRENADE_PROJECTILE_RADIUS,
-                    width: GRENADE_PROJECTILE_RADIUS * 2,
-                    height: GRENADE_PROJECTILE_RADIUS * 2
-                },
-                obj
-            );
-            if (hit) {
-                state.client?.emit('itemDetonate', JSON.stringify({ projectileId: projectile.id, x: projectile.x, y: projectile.y }));
-                break;
-            }
-        }
-    }
 }
 
 function updateMovement(scene, deltaTime, commands) {
@@ -291,16 +156,6 @@ function updateVoting(scene, deltaTime) {
             }
         }
     }
-}
-
-function updateLocalProjectiles(deltaTime) {
-    if (!state.localProjectiles.length) return;
-    const now = performance.now();
-    state.localProjectiles = state.localProjectiles.filter(projectile => {
-        projectile.x += projectile.vx * deltaTime;
-        projectile.y += projectile.vy * deltaTime;
-        return now - projectile.spawnTime < 3000;
-    });
 }
 
 export function updateGameScene(scene, deltaTime, commands) {

@@ -26,6 +26,7 @@ export const state = {
     dashTimeRemaining: 0,
     spectatorTargetName: null,
     spectatorTargetIndex: 0,
+    respawnPending: false,
     life: PlayerLife.ALIVE,
     items: [],
     projectiles: [],

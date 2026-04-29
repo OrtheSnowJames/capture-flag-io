@@ -24,8 +24,17 @@ export function drawWorld(scene, ctx) {
     if (!cameraTarget ||
         typeof cameraTarget.x === 'undefined' ||
         typeof cameraTarget.y === 'undefined') {
-        console.error("Camera target not found");
-        return false;
+        if (state.life === PlayerLife.DEAD) {
+            // If everyone is dead/disconnected, keep rendering with a stable fallback
+            // so the death overlay can still be shown.
+            cameraTarget = {
+                x: state.field.x + state.field.width / 2,
+                y: state.field.y + state.field.height / 2
+            };
+        } else {
+            console.error("Camera target not found");
+            return false;
+        }
     }
 
     ctx.setZoom(CAMERA_ZOOM);

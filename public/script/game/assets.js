@@ -30,6 +30,71 @@ export const audio = {
 };
 
 let fadeRequestId = null;
+let musicTracks = [];
+let musicCycleIndex = -1;
+let tracksLoaded = false;
+
+function applyTrackForAllMaps(trackPath) {
+    Object.values(audio.maps).forEach(map => {
+        if (!map.bgm) return;
+        map.bgm.pause();
+        map.bgm.currentTime = 0;
+        map.bgm.src = trackPath;
+        map.bgm.loop = true;
+        map.bgm.load();
+    });
+}
+
+export async function loadMusicTracks() {
+    if (tracksLoaded) return musicTracks;
+    try {
+        const response = await fetch('/api/music-tracks');
+        const data = await response.json();
+        if (Array.isArray(data.tracks) && data.tracks.length > 0) {
+            musicTracks = data.tracks;
+        }
+    } catch (error) {
+        console.error("Failed to load music tracks:", error);
+    }
+
+    if (musicTracks.length === 0) {
+        musicTracks = ["/assets/music/evansong1.wav"];
+    }
+
+    tracksLoaded = true;
+    return musicTracks;
+}
+
+export function getMusicCycleState() {
+    if (musicCycleIndex < 0) {
+        return { muted: true, label: "Muted" };
+    }
+    const trackName = musicTracks[musicCycleIndex]?.split('/').pop() || `Track ${musicCycleIndex + 1}`;
+    return { muted: false, label: trackName };
+}
+
+export function setMusicMutedByDefault() {
+    musicCycleIndex = -1;
+    muteBGM(true);
+}
+
+export function cycleBGMTrack() {
+    if (musicTracks.length === 0) {
+        musicTracks = ["/assets/music/evansong1.wav"];
+    }
+
+    musicCycleIndex += 1;
+    if (musicCycleIndex >= musicTracks.length) {
+        musicCycleIndex = -1;
+        muteBGM(true);
+        return getMusicCycleState();
+    }
+
+    applyTrackForAllMaps(musicTracks[musicCycleIndex]);
+    muteBGM(false);
+    startBGM();
+    return getMusicCycleState();
+}
 
 export function startBGM() {
     const currentMap = state.game.currentMap;

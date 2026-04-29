@@ -4,7 +4,39 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT, naem } from "../../../script.js";
 import { state } from "../../state.js";
 import { GamePhase, isIntermissionPhase } from "../../enums.js";
 import { readableMessages, messageBoxHeight, dashCooldown } from "../../constants.js";
-import { muteBGM } from "../../assets.js";
+import { cycleBGMTrack, getMusicCycleState } from "../../assets.js";
+
+const HUD_THEME = {
+    panelBg: "rgba(8, 14, 24, 0.78)",
+    panelBorder: "rgba(109, 168, 255, 0.7)",
+    panelInner: "rgba(255, 255, 255, 0.06)",
+    textPrimary: "#F4F8FF",
+    textMuted: "#BDD2F7",
+    accent: "#4DA3FF",
+    danger: "#FF6B6B",
+    success: "#8DE08A",
+    button: {
+        bg: "#122236",
+        hover: "#193353",
+        pressed: "#0F1C2D",
+        border: "#73B2FF",
+        text: "#EEF6FF"
+    },
+    buttonDanger: {
+        bg: "#3A1C22",
+        hover: "#512731",
+        pressed: "#2C1419",
+        border: "#FF8EA1",
+        text: "#FFF0F3"
+    },
+    buttonAccent: {
+        bg: "#193446",
+        hover: "#24506A",
+        pressed: "#163345",
+        border: "#7AD1FF",
+        text: "#F2FBFF"
+    }
+};
 
 export function setupBaseUI(scene) {
     const messageBoxWidth = CANVAS_WIDTH * scene.messageBoxWidthRatio;
@@ -34,7 +66,7 @@ export function setupBaseUI(scene) {
         messageBoxHeight + CANVAS_HEIGHT * 0.175,
         buttonWidth,
         buttonHeight,
-        "Music Mute"
+        "Switch Track"
     );
 
     scene.backButton = new OCtxButton(
@@ -46,6 +78,39 @@ export function setupBaseUI(scene) {
     );
 
     scene.messageField.setPlaceholder("Type a message");
+    scene.messageField.setColors("#0D1B2A", "#6AAAF8", "#EAF4FF");
+    scene.messageField.setPlaceholderColor("#88A8D6");
+    scene.messageField.setFontSize(Math.max(14, CANVAS_HEIGHT * 0.021));
+
+    scene.submitButton.setColors(
+        HUD_THEME.buttonAccent.bg,
+        HUD_THEME.buttonAccent.hover,
+        HUD_THEME.buttonAccent.pressed,
+        HUD_THEME.buttonAccent.border,
+        HUD_THEME.buttonAccent.text
+    );
+    scene.submitButton.fontSize = Math.max(14, CANVAS_HEIGHT * 0.024);
+    scene.submitButton.cornerRadius = 10;
+
+    scene.musicButton.setColors(
+        HUD_THEME.button.bg,
+        HUD_THEME.button.hover,
+        HUD_THEME.button.pressed,
+        HUD_THEME.button.border,
+        HUD_THEME.button.text
+    );
+    scene.musicButton.fontSize = Math.max(13, CANVAS_HEIGHT * 0.021);
+    scene.musicButton.cornerRadius = 10;
+
+    scene.backButton.setColors(
+        HUD_THEME.buttonDanger.bg,
+        HUD_THEME.buttonDanger.hover,
+        HUD_THEME.buttonDanger.pressed,
+        HUD_THEME.buttonDanger.border,
+        HUD_THEME.buttonDanger.text
+    );
+    scene.backButton.fontSize = Math.max(13, CANVAS_HEIGHT * 0.021);
+    scene.backButton.cornerRadius = 10;
 }
 
 export function setupMapButtons(scene) {
@@ -62,6 +127,15 @@ export function setupMapButtons(scene) {
             `Map ${i + 1}`
         );
         button.deactivate();
+        button.setColors(
+            HUD_THEME.button.bg,
+            HUD_THEME.button.hover,
+            HUD_THEME.button.pressed,
+            HUD_THEME.button.border,
+            HUD_THEME.button.text
+        );
+        button.cornerRadius = 12;
+        button.fontSize = Math.max(14, CANVAS_HEIGHT * 0.022);
         scene.mapButtons.push(button);
     }
 }
@@ -156,8 +230,8 @@ export function updateUI(scene, commands, deltaTime) {
     scene.musicButton.update(commands);
 
     if (scene.musicButton.isClicked(commands)) {
-        state.newMusicPlay = !state.newMusicPlay;
-        muteBGM(!state.newMusicPlay);
+        const musicState = cycleBGMTrack();
+        state.newMusicPlay = !musicState.muted;
     }
 
     if (scene.backButton.isClicked(commands)) {
@@ -236,22 +310,39 @@ export function drawHUD(scene, ctx) {
 
     const messageBoxWidth = CANVAS_WIDTH * scene.messageBoxWidthRatio;
     const messageBoxHeight = CANVAS_HEIGHT * scene.messageBoxHeightRatio;
-    ctx.drawRect(
+    ctx.drawRoundedRectFill(
         0,
         0,
         messageBoxWidth,
         messageBoxHeight,
-        "rgba(255, 255, 255, 0.5)",
+        12,
+        HUD_THEME.panelBg,
         false,
         false
     );
+    ctx.drawRoundedRectFill(
+        6,
+        6,
+        messageBoxWidth - 12,
+        messageBoxHeight - 12,
+        10,
+        HUD_THEME.panelInner,
+        false,
+        false
+    );
+    const raw = ctx.rawCtx();
+    raw.save();
+    raw.strokeStyle = HUD_THEME.panelBorder;
+    raw.lineWidth = 2;
+    raw.strokeRect(1, 1, messageBoxWidth - 2, messageBoxHeight - 2);
+    raw.restore();
 
     const displayMessages = [...state.game.messages].slice(-readableMessages);
     const messageFontSize = CANVAS_HEIGHT * scene.messageFontSizeRatio;
     for (let i = 0; i < displayMessages.length; i++) {
         const message = displayMessages[i];
         const messageY = (i + 1) * (messageBoxHeight / readableMessages) - 10;
-        ctx.drawText(5, messageY, message, "white", messageFontSize, false, false);
+        ctx.drawText(8, messageY, message, HUD_THEME.textPrimary, messageFontSize, false, false);
     }
 
     scene.messageField.draw(ctx, false, false);
@@ -259,12 +350,13 @@ export function drawHUD(scene, ctx) {
     scene.backButton.draw(ctx, false, false);
     scene.musicButton.draw(ctx, false, false);
 
+    const musicState = getMusicCycleState();
     ctx.drawText(
-        scene.musicButton.bounds.x + scene.musicButton.bounds.width / 5,
+        scene.musicButton.bounds.x + 6,
         scene.musicButton.bounds.y + scene.musicButton.bounds.height - 7,
-        state.newMusicPlay ? "✓" : "✗",
-        "black",
-        messageFontSize,
+        `Track: ${musicState.label}`,
+        HUD_THEME.textMuted,
+        messageFontSize * 0.75,
         false,
         false
     );
@@ -282,7 +374,7 @@ export function drawHUD(scene, ctx) {
                 scene.mobileButtons.dash.bounds.y + scene.mobileButtons.dash.bounds.height - 4,
                 indicatorWidth,
                 4,
-                "red",
+                HUD_THEME.danger,
                 false,
                 false
             );
@@ -294,12 +386,13 @@ export function drawHUD(scene, ctx) {
         const timerBoxHeight = CANVAS_HEIGHT * scene.timerBoxHeightRatio;
         const timerFontSize = CANVAS_HEIGHT * scene.timerFontSizeRatio;
 
-        ctx.drawRect(
+        ctx.drawRoundedRectFill(
             CANVAS_WIDTH / 2 - timerBoxWidth / 2,
             CANVAS_HEIGHT * 0.0125,
             timerBoxWidth,
             timerBoxHeight,
-            "black",
+            10,
+            "rgba(7, 20, 34, 0.88)",
             false,
             false
         );
@@ -310,7 +403,7 @@ export function drawHUD(scene, ctx) {
                 CANVAS_WIDTH / 2,
                 CANVAS_HEIGHT * 0.0125 + timerBoxHeight / 2,
                 "OVERTIME",
-                "red",
+                HUD_THEME.danger,
                 timerFontSize,
                 false,
                 false
@@ -320,7 +413,7 @@ export function drawHUD(scene, ctx) {
                 CANVAS_WIDTH / 2,
                 CANVAS_HEIGHT * 0.0125 + timerBoxHeight / 2,
                 scene.timestamp.string(),
-                "white",
+                HUD_THEME.textPrimary,
                 timerFontSize,
                 false,
                 false
@@ -342,12 +435,13 @@ export function drawHUD(scene, ctx) {
             false
         );
 
-        ctx.drawRect(
+        ctx.drawRoundedRectFill(
             CANVAS_WIDTH / 2 - winnerBoxWidth / 2,
             CANVAS_HEIGHT * 0.0125,
             winnerBoxWidth,
             winnerBoxHeight,
-            "black",
+            10,
+            "rgba(7, 20, 34, 0.92)",
             false,
             false
         );
@@ -357,7 +451,7 @@ export function drawHUD(scene, ctx) {
             CANVAS_WIDTH / 2,
             CANVAS_HEIGHT * 0.0125 + winnerBoxHeight / 2,
             `${state.winners.player} (${state.winners.team})`,
-            "white",
+            HUD_THEME.textPrimary,
             winnerFontSize,
             false,
             false
@@ -373,7 +467,7 @@ export function drawHUD(scene, ctx) {
                 CANVAS_WIDTH / 2,
                 CANVAS_HEIGHT * 0.5,
                 "Select a map",
-                "white",
+                HUD_THEME.textPrimary,
                 voteFontSize,
                 false,
                 false
@@ -394,7 +488,7 @@ export function drawHUD(scene, ctx) {
                     CANVAS_WIDTH / 2,
                     voteYPosition,
                     `${state.mapSelection[i]}: ${voteCount} votes`,
-                    "white",
+                    HUD_THEME.textMuted,
                     voteFontSize,
                     false,
                     false
@@ -409,7 +503,7 @@ export function drawHUD(scene, ctx) {
                     CANVAS_WIDTH / 2,
                     CANVAS_HEIGHT * 0.3,
                     timerText,
-                    timeLeft <= 3 ? "red" : "white",
+                    timeLeft <= 3 ? HUD_THEME.danger : HUD_THEME.textPrimary,
                     voteTimerFontSize,
                     false,
                     false

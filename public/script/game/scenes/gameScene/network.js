@@ -82,10 +82,14 @@ export function setupNetworkListeners(scene) {
             data = JSON.parse(data);
         }
 
+        console.log(
+            `[DBG][client-kill] local=${naem} victim=${data.player} killer=${data.killer} lifeBefore=${state.life} hasLocalBefore=${Boolean(state.game.players[naem])}`
+        );
         const isLocalPlayer = data.player === naem;
 
         if (isLocalPlayer) {
             state.life = PlayerLife.DEAD;
+            state.respawnPending = false;
             state.spectatorTargetName = null;
             state.spectatorTargetIndex = 0;
             scene.messageField.setValue("");
@@ -96,6 +100,10 @@ export function setupNetworkListeners(scene) {
         if (state.game.players[data.player]) {
             delete state.game.players[data.player];
         }
+
+        console.log(
+            `[DBG][client-kill-done] local=${naem} lifeAfter=${state.life} hasLocalAfter=${Boolean(state.game.players[naem])}`
+        );
     });
 
     state.client.on('flagCaptured', (data) => {
@@ -194,6 +202,10 @@ export function setupNetworkListeners(scene) {
         }
 
         const { items, projectiles, smokeClouds, explosions, ...gameData } = data;
+        const hasLocalInGameState = Boolean(gameData?.players && gameData.players[naem]);
+        console.log(
+            `[DBG][client-gameState] local=${naem} life=${state.life} respawnPending=${state.respawnPending} hasLocalInState=${hasLocalInGameState} playerCount=${Object.keys(gameData.players || {}).length}`
+        );
 
         Object.keys(gameData.players).forEach(playerName => {
             const player = gameData.players[playerName];
@@ -203,6 +215,16 @@ export function setupNetworkListeners(scene) {
             player.targetY = player.y;
             player.interpolationTime = 0;
         });
+
+        // Finalize respawn only when the server confirms the local player exists again.
+        if (state.respawnPending && gameData.players && gameData.players[naem]) {
+            state.life = PlayerLife.ALIVE;
+            state.respawnPending = false;
+            state.spectatorTargetName = null;
+            state.spectatorTargetIndex = 0;
+            fadeBGMTo(state.newMusicPlay ? 1 : 0);
+            console.log(`[DBG][client-respawn-finalized] local=${naem}`);
+        }
 
         Object.keys(gameData.flags).forEach(flagName => {
             const flag = gameData.flags[flagName];

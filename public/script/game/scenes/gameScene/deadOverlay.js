@@ -2,8 +2,6 @@
 import { OCtxButton } from "../../../context-engine.mjs";
 import { CANVAS_WIDTH, CANVAS_HEIGHT, naem } from "../../../script.js";
 import { state } from "../../state.js";
-import { PlayerLife } from "../../enums.js";
-import { fadeBGMTo } from "../../assets.js";
 
 export function setupDeadOverlay(scene) {
     const buttonWidth = CANVAS_WIDTH * scene.deadButtonWidthRatio;
@@ -46,6 +44,16 @@ export function setupDeadOverlay(scene) {
         buttonHeight,
         "→"
     );
+
+    scene.deadLeftButton.setColors("#122236", "#1A3556", "#0F1C2D", "#73B2FF", "#EEF6FF");
+    scene.deadRightButton.setColors("#122236", "#1A3556", "#0F1C2D", "#73B2FF", "#EEF6FF");
+    scene.deadRespawnButton.setColors("#1B3D2A", "#24553A", "#153123", "#8CE0A6", "#F1FFF6");
+    scene.deadLeaveButton.setColors("#3A1C22", "#512731", "#2C1419", "#FF8EA1", "#FFF0F3");
+
+    scene.deadLeftButton.cornerRadius = 10;
+    scene.deadRightButton.cornerRadius = 10;
+    scene.deadRespawnButton.cornerRadius = 10;
+    scene.deadLeaveButton.cornerRadius = 10;
 }
 
 function getSpectatorTargets() {
@@ -99,13 +107,11 @@ export function updateDeadOverlay(scene, commands) {
     }
 
     if (scene.deadRespawnButton.isClicked(commands)) {
-        if (state.client) {
+        if (state.client && !state.respawnPending) {
+            console.log(`[DBG][client-respawn-click] local=${naem}`);
             state.client.emit('respawn', JSON.stringify({ name: naem }));
+            state.respawnPending = true;
         }
-        state.life = PlayerLife.ALIVE;
-        fadeBGMTo(state.newMusicPlay ? 1 : 0);
-        state.spectatorTargetName = null;
-        state.spectatorTargetIndex = 0;
     }
 
     if (scene.deadLeaveButton.isClicked(commands)) {
@@ -123,6 +129,16 @@ export function drawDeadOverlay(scene, ctx) {
     const titleFontSize = CANVAS_HEIGHT * scene.deadTitleFontSizeRatio;
 
     ctx.setTextAlign("center");
+    ctx.drawRoundedRectFill(
+        CANVAS_WIDTH * 0.27,
+        CANVAS_HEIGHT * 0.65,
+        CANVAS_WIDTH * 0.46,
+        CANVAS_HEIGHT * 0.23,
+        14,
+        "rgba(7, 20, 34, 0.78)",
+        false,
+        false
+    );
     ctx.drawText(
         CANVAS_WIDTH / 2,
         CANVAS_HEIGHT * 0.72,

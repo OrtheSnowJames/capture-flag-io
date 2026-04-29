@@ -4,7 +4,7 @@ import { naem, engine, lobbyPath, musicPlay } from "../../script.js";
 import { state } from "../state.js";
 import { GamePhase, PlayerLife } from "../enums.js";
 import { loadMaps, parseMap } from "../maps.js";
-import { startBGM, muteBGM } from "../assets.js";
+import { startBGM, muteBGM, fadeBGMTo, loadMusicTracks, setMusicMutedByDefault } from "../assets.js";
 import { isMobileDevice } from "../utils.js";
 import { timeData } from "../../globals.js";
 import { setupBaseUI, setupMapButtons, setupMobileButtons, drawHUD } from "./gameScene/ui.js";
@@ -85,6 +85,9 @@ export class gameScene extends Scene {
     async onLoad(commands) {
         this.commands = commands;
         state.newMusicPlay = musicPlay;
+        await loadMusicTracks();
+        setMusicMutedByDefault();
+        state.newMusicPlay = false;
         if (!await loadMaps()) {
             commands.globals.reason = "Failed to load maps. Please try again.";
             commands.switchScene(0);
@@ -124,6 +127,7 @@ export class gameScene extends Scene {
         state.initialized = false;
         state.sendName = false;
         state.getClient = false;
+        state.respawnPending = false;
         state.life = PlayerLife.ALIVE;
         state.phase = GamePhase.GAME;
         muteBGM(true);
@@ -169,6 +173,7 @@ export class gameScene extends Scene {
         state.initialized = false;
         state.sendName = false;
         state.getClient = false;
+        state.respawnPending = false;
         state.life = PlayerLife.ALIVE;
 
         engine.scenes[1] = new gameScene();
@@ -176,6 +181,25 @@ export class gameScene extends Scene {
 
     update(deltaTime, commands) {
         try {
+            // Defensive fallback: if local player vanished while marked alive,
+            // force dead state so the client never gets stuck in a non-playable limbo.
+            if (
+                state.initialized &&
+                state.life === PlayerLife.ALIVE &&
+                !state.respawnPending &&
+                !state.game.players[naem]
+            ) {
+                console.log(`[DBG][client-fallback-dead] local=${naem} reason=alive_without_local_player`);
+                state.life = PlayerLife.DEAD;
+                state.spectatorTargetName = null;
+                state.spectatorTargetIndex = 0;
+                if (this.messageField) {
+                    this.messageField.setValue("");
+                    this.messageField.deactivate();
+                }
+                fadeBGMTo(0);
+            }
+
             if (state.life === PlayerLife.DEAD) {
                 tickSpectator(this, deltaTime);
                 updateDeadOverlay(this, commands);

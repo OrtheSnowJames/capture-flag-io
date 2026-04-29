@@ -68,6 +68,23 @@ function checkCollision(x1, y1, w1, h1, x2, y2, w2, h2) {
         y1 + h1 > y2;
 }
 
+function distanceSquaredPointToSegment(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    if (dx === 0 && dy === 0) {
+        const sx = px - x1;
+        const sy = py - y1;
+        return sx * sx + sy * sy;
+    }
+    const t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy);
+    const clamped = Math.max(0, Math.min(1, t));
+    const cx = x1 + clamped * dx;
+    const cy = y1 + clamped * dy;
+    const ddx = px - cx;
+    const ddy = py - cy;
+    return ddx * ddx + ddy * ddy;
+}
+
 function checkCollisionPlayerFlag(player, flag) {
     return checkCollision(player.x, player.y, playerWidth, playerHeight, flag.x, flag.y, flagWidth, flagHeight);
 }
@@ -165,6 +182,21 @@ app.get('/', (req, res) => {
 
 app.get('/feedback', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/feedback.html'));
+});
+
+app.get('/api/music-tracks', (req, res) => {
+    try {
+        const musicDir = path.join(__dirname, 'public/assets/music');
+        const allowedExtensions = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac']);
+        const tracks = fs.readdirSync(musicDir)
+            .filter(file => allowedExtensions.has(path.extname(file).toLowerCase()))
+            .sort((a, b) => a.localeCompare(b))
+            .map(file => `/assets/music/${file}`);
+        res.json({ tracks });
+    } catch (error) {
+        console.error('Error reading music tracks:', error);
+        res.status(500).json({ tracks: [] });
+    }
 });
 
 // Non-game rest apis
@@ -451,6 +483,8 @@ class GameServer {
         if (this.projectiles.length > 0) {
             const remaining = [];
             for (const projectile of this.projectiles) {
+                const prevX = projectile.x;
+                const prevY = projectile.y;
                 projectile.x += projectile.vx * deltaSec;
                 projectile.y += projectile.vy * deltaSec;
 
@@ -477,10 +511,21 @@ class GameServer {
                 if (projectile.x < 0 || projectile.x > fieldWidth || projectile.y < 0 || projectile.y > fieldHeight) {
                     detonated = true;
                 } else {
-                    const dx = projectile.targetX - projectile.x;
-                    const dy = projectile.targetY - projectile.y;
-                    if (Math.hypot(dx, dy) <= 10) {
-                        detonated = true;
+                    const hasTarget = typeof projectile.targetX === "number" && typeof projectile.targetY === "number";
+                    if (hasTarget) {
+                        const distanceSquared = distanceSquaredPointToSegment(
+                            projectile.targetX,
+                            projectile.targetY,
+                            prevX,
+                            prevY,
+                            projectile.x,
+                            projectile.y
+                        );
+                        if (distanceSquared <= 100) {
+                            detonated = true;
+                            projectile.x = projectile.targetX;
+                            projectile.y = projectile.targetY;
+                        }
                     }
                 }
 
@@ -515,6 +560,9 @@ class GameServer {
     }
 
     detonateProjectile(projectile, x, y) {
+        console.log(
+            `[DBG][detonate] lobby=${this.lobby} type=${projectile.type} owner=${projectile.owner || "system"} x=${x.toFixed(1)} y=${y.toFixed(1)} players=${Object.keys(this.game.players).length}`
+        );
         if (projectile.type === "frag") {
             this.explosions.push({
                 id: this.nextExplosionId++,
@@ -526,7 +574,11 @@ class GameServer {
             Object.values(this.game.players).forEach(player => {
                 const dx = player.x - x;
                 const dy = player.y - y;
-                if (Math.hypot(dx, dy) <= fragKillRadius) {
+                const distance = Math.hypot(dx, dy);
+                if (distance <= fragKillRadius) {
+                    console.log(
+                        `[DBG][frag-hit] lobby=${this.lobby} victim=${player.name} owner=${projectile.owner || "system"} distance=${distance.toFixed(2)}`
+                    );
                     this.dropHeldItems(player);
                     this.emitWithLogging('kill', JSON.stringify({ player: player.name, killer: projectile.owner || "system" }));
                     if (player.capture) {
@@ -542,6 +594,10 @@ class GameServer {
                         this.blues--;
                     }
                     delete this.game.players[player.name];
+                    this.count = Math.max(0, this.count - 1);
+                    console.log(
+                        `[DBG][frag-kill] lobby=${this.lobby} victim=${player.name} deleted=true count=${this.count}`
+                    );
                 }
             });
         } else {
@@ -588,7 +644,7 @@ class GameServer {
 
     do() {
         this.io.on('connection', (socket) => {
-            console.log(`A user connected to ${this.io.name}!`);
+            console.log(`A user connected to ${this.io.name}`);
 
             socket.on('message', (msg) => {
                 const player = this.game.players[msg.split(" said ")[0]];
@@ -918,6 +974,11 @@ class GameServer {
                         this.emitWithLogging('flagReturned', JSON.stringify({ player: player.name, flag: flag.team, scoredBy: player.name }));
                     }
                     this.io.emit('move', JSON.stringify(data));
+                } else if (data?.name) {
+                    const meta = this.socketMeta.get(socket.id);
+                    console.log(
+                        `[DBG][move-missing-player] lobby=${this.lobby} socket=${socket.id} metaName=${meta?.name || "none"} packetName=${data.name}`
+                    );
                 }
             });
 
@@ -940,6 +1001,7 @@ class GameServer {
                     this.ops.delete(playerName);
                     delete this.game.players[playerName];
                     this.count--; // Decrement player count
+                    console.log(`count: ${this.count}`)
                     this.emitWithLogging('kill', JSON.stringify({ player: playerName, killer: "system" }));
                     
                     // If no players left, reset the timer and stop it
@@ -1012,7 +1074,7 @@ const lobbies = [];
 createPublicLobby();
 createPublicLobby();
 
-setInterval(() => {
+const lobbyCleanupInterval = setInterval(() => {
     cleanupEmptyPublicLobbies();
 }, 30000);
 
@@ -1158,16 +1220,7 @@ process.stdin.on('data', (input) => {
         }
     } else if (command.trim() === 'exit') {
         console.log('Exiting server...');
-        // emit a kill event to all players
-        lobbies.forEach((lobby) => {
-            Object.values(lobby.server.game.players).forEach((player) => {
-                lobby.server.kickPlayer(player.name);
-            });
-        });
-        server.close(() => {
-            console.log('Server closed.');
-            process.exit(0);
-        });
+        shutdownServer('stdin exit');
     } else if (command.trim() === 'clear') {
         console.clear();
         exec('reset');
@@ -1257,25 +1310,34 @@ server.listen(PORT, () => {
     });
 });
 
-process.on('SIGINT', () => {
-    console.log('SIGINT signal received. Exiting server in 3 seconds...');
+let shuttingDown = false;
+function shutdownServer(trigger = 'unknown') {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`Shutdown requested (${trigger}). Closing gracefully...`);
+
+    clearInterval(lobbyCleanupInterval);
+
     lobbies.forEach((lobby) => {
+        if (!lobby?.server) return;
         Object.values(lobby.server.game.players).forEach((player) => {
-            Task(async () => {
-                lobby.server.emitWithLogging('kill', JSON.stringify({ player: player.name, killer: "system" }));
-            });
+            lobby.server.emitWithLogging('kill', JSON.stringify({ player: player.name, killer: "system" }));
+        });
+        lobby.server.shutdown();
+    });
+
+    io.close(() => {
+        server.close(() => {
+            console.log('Server closed gracefully.');
+            process.exit(0);
         });
     });
-    
-    // Set a timeout to forcefully exit after 3 seconds
-    setTimeout(() => {
-        console.log('Forcefully exiting after 3 seconds...');
-        process.exit(0);
-    }, 3000);
+}
 
-    // Try to close the server gracefully
-    server.close(() => {
-        console.log('Server closed gracefully.');
-        process.exit(0);
-    });
+process.on('SIGINT', () => {
+    shutdownServer('SIGINT');
+});
+
+process.on('SIGTERM', () => {
+    shutdownServer('SIGTERM');
 });
