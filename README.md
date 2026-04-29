@@ -45,7 +45,6 @@ firefox http://localhost:4566
 ```
 
 ## Future Plans
-- Stripe integration
 - Skins - Work In Progress, Avalible as operator with !op commands
 - Publishing context-engine as an npm package
 

@@ -1,0 +1,12 @@
+improve
+    death
+    how flag is held
+    you just can't die in the safe zones, even with grenade
+    //spectate
+    //takes like 5 years to pick up a smoke grenade
+
+new stuff
+    entirely new combat
+        //smoke grenades
+        
+        grenade

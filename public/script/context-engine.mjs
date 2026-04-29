@@ -681,6 +681,42 @@ export class Commands {
                 this.mouseReleased = false;
             }, 50);
         });
+        
+        // Add touch event support for mobile devices
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent default touch behavior
+            if (e.touches.length > 0) {
+                const rect = canvas.getBoundingClientRect();
+                this.mouseX = e.touches[0].clientX - rect.left;
+                this.mouseY = e.touches[0].clientY - rect.top;
+                this.mouseDown = true;
+                this.mouseReleased = false;
+            }
+        }, { passive: false });
+        
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // Prevent scrolling
+            if (e.touches.length > 0) {
+                const rect = canvas.getBoundingClientRect();
+                this.mouseX = e.touches[0].clientX - rect.left;
+                this.mouseY = e.touches[0].clientY - rect.top;
+            }
+        }, { passive: false });
+        
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            this.mouseReleased = true;
+            this.mouseDown = false;
+            setTimeout(() => {
+                this.mouseReleased = false;
+            }, 50);
+        }, { passive: false });
+        
+        canvas.addEventListener('touchcancel', (e) => {
+            e.preventDefault();
+            this.mouseDown = false;
+            this.mouseReleased = false;
+        }, { passive: false });
     }
     switchScene(index) {
         if (index >= 0 && index < this.scenes.length) {

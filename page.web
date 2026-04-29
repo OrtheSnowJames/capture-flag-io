@@ -1,0 +1,40 @@
+function togglePlay {
+    playing = !playing
+    if (playing) {audio.play()} else {audio.pause()}
+}
+
+function updateTime {
+    time = audio.currentTime
+}
+
+function formatTime(t:int) {
+    minutes = floor(t / 60)
+    seconds = floor(t % 60)
+    return pad(minutes) + ":" + pad(seconds)
+}
+
+define AudioPlayer {
+    let label:string;
+    let audiop:string;
+    let playing = false
+    let time = 0
+
+    constructor(audiopath:string?) {
+        // when they do AudioPlayer("")thing, thing is in the content var
+        audiop = audiopath!;
+        label = content!;
+    }
+
+    return [
+        audio(src='${audiop}', id="audio", onTimeUpdate=updateTime)
+
+        text(){formatTime(time)} // could also do text(){{formatTime(time)}} if want to do the text normally
+        text(size=h3size){label}
+
+        button(onClick=togglePlay)if(playing, "Pause", "Play")
+    ]
+}
+
+let pgcontents = Content(AudioPlayer()audiofile);
+
+return Page(contents=pgcontents);
