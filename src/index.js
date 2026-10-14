@@ -22,11 +22,19 @@ const app = express();
 
 // Create an HTTP server using express app
 const server = http.createServer(app);
+const allowedOrigins = [
+    "https://snowingjamess.com",
+    "https://www.snowingjamess.com",
+    "https://orthesnowjames.github.io",
+    "https://capture-flag-io.onrender.com",
+    "http://localhost:4566",
+    "http://localhost:8080",
+];
 
 // Create a single Socket.IO server instance
 const io = new Server(server, {
     cors: {
-        origin: "http://localhost:4566",
+        origin: allowedOrigins,
         methods: ["GET", "POST"],
     },
 });
@@ -134,7 +142,7 @@ app.use(express.static('public'));
 app.use(express.json());
 
 app.use(cors({
-    origin: 'http://localhost:4566', 
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Origin', 'X-Requested-With', 'Accept'],
 }));
