@@ -105,7 +105,7 @@ function updateHoverState(hoveredItem) {
     }
 }
 
-function requestPickupIfNeeded(hoveredItem) {
+function requestPickupIfNeeded(hoveredItem, player) {
     if (!hoveredItem) {
         state.pendingPickupItemId = null;
         return;
@@ -118,6 +118,9 @@ function requestPickupIfNeeded(hoveredItem) {
         state.lastPickupRequestItemId = hoveredItem.id;
         state.lastPickupRequestTime = now;
         console.log(`[grenade] pickup request for item ${hoveredItem.id}`);
+        // send the pickup position first so the server does not check an older movement update
+        state.client?.emit('move', JSON.stringify({ name: naem, x: player.x, y: player.y }));
+        state.lastMovementUpdate = now;
         state.client?.emit('itemPickup', JSON.stringify({ itemId: hoveredItem.id }));
     }
 }
@@ -127,7 +130,7 @@ function handleGroundItems(player) {
 
     const hoveredItem = findHoveredGroundItem(player);
     updateHoverState(hoveredItem);
-    requestPickupIfNeeded(hoveredItem);
+    requestPickupIfNeeded(hoveredItem, player);
 }
 
 function updateHeldOrbit(heldItem, player, commands) {
